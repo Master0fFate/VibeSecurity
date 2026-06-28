@@ -1,0 +1,51 @@
+- id: github-actions-pr-target
+  category: ci-cd
+  severity_hint: high
+  confidence_hint: high
+  globs:
+    - "**/.github/workflows/*.yml"
+    - "**/.github/workflows/*.yaml"
+  patterns:
+    - "pull_request_target"
+  nearby_terms:
+    - "checkout"
+    - "run:"
+    - "npm"
+    - "pnpm"
+    - "yarn"
+  reason: "Privileged pull_request_target workflow may execute untrusted fork code."
+  review_prompt: "Confirm whether attacker-controlled code runs with trusted token or secrets."
+- id: unpinned-github-action
+  category: supply-chain
+  severity_hint: medium
+  confidence_hint: medium
+  globs:
+    - "**/.github/workflows/*.yml"
+    - "**/.github/workflows/*.yaml"
+  patterns:
+    - "uses:"
+  nearby_terms:
+    - "@v"
+    - "@main"
+    - "@master"
+  reason: "Third-party action may be version-tag pinned instead of commit pinned."
+  review_prompt: "Check whether the action is trusted and whether commit pinning is appropriate."
+- id: package-install-script
+  category: supply-chain
+  severity_hint: medium
+  confidence_hint: medium
+  globs:
+    - "**/package.json"
+    - "**/pyproject.toml"
+    - "**/Cargo.toml"
+  patterns:
+    - "postinstall"
+    - "preinstall"
+    - "curl |"
+    - "bash -c"
+  nearby_terms:
+    - "scripts"
+    - "build"
+    - "install"
+  reason: "Install or build script may execute unexpected code."
+  review_prompt: "Inspect script source, trust boundary, and whether network downloads or shell pipes are necessary."

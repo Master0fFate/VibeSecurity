@@ -1,0 +1,18 @@
+- id: local-project-short-name
+  category: authz|authn|injection|ssrf|secrets|supply-chain|ci-cd|ai-agentic|other
+  severity_hint: medium
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.py"
+  patterns:
+    - "risky literal or regex fragment"
+  nearby_terms:
+    - "optional contextual term"
+  reason: "Why this candidate deserves manual review."
+  review_prompt: >
+    Confirm reachability, boundary crossing, impact, and safe remediation before reporting.
+  positive_examples:
+    - "Confirmed smell that should match."
+  negative_examples:
+    - "Benign pattern that should not become a finding."

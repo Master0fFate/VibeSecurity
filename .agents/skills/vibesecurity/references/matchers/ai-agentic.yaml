@@ -1,0 +1,70 @@
+- id: ai-output-to-shell
+  category: ai-agentic
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.py"
+  patterns:
+    - "subprocess."
+    - "os.system("
+    - "exec("
+    - "spawn("
+    - "child_process"
+  nearby_terms:
+    - "openai"
+    - "anthropic"
+    - "model"
+    - "completion"
+    - "tool"
+    - "agent"
+  reason: "Potential model or user-controlled input to command execution."
+  review_prompt: "Confirm whether model output can influence command execution; prefer allowlists and human approval."
+- id: prompt-with-privileged-tools
+  category: ai-agentic
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.py"
+  patterns:
+    - "tools:"
+    - "tool_calls"
+    - "function_call"
+    - "runTools("
+    - "agent.run"
+  nearby_terms:
+    - "delete"
+    - "deploy"
+    - "payment"
+    - "shell"
+    - "filesystem"
+    - "browser"
+  reason: "Potential excessive agency or missing approval boundary for privileged tools."
+  review_prompt: "Review tool scope, authorization, tenant context, approval boundaries, and audit logging."
+- id: retrieved-content-as-instructions
+  category: ai-agentic
+  severity_hint: medium
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.py"
+  patterns:
+    - "retriever"
+    - "vector"
+    - "documents"
+    - "context"
+    - "rag"
+  nearby_terms:
+    - "system"
+    - "instructions"
+    - "follow"
+    - "tools"
+  reason: "Potential indirect prompt injection if retrieved content is treated as instructions."
+  review_prompt: "Check whether retrieved content is quoted as untrusted data and whether tools remain constrained."

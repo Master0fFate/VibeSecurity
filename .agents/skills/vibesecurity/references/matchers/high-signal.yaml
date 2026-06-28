@@ -1,0 +1,136 @@
+- id: possible-secret-literal
+  category: secrets
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*"
+  patterns:
+    - "api_key"
+    - "apikey"
+    - "client_secret"
+    - "private_key"
+    - "jwt_secret"
+    - "BEGIN PRIVATE KEY"
+  nearby_terms:
+    - "="
+    - ":"
+  reason: "Potential hardcoded secret or key material."
+  review_prompt: "Confirm whether the value is real, exposed, and requires rotation without printing it."
+- id: missing-auth-route-candidate
+  category: authz
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/route.ts"
+    - "**/route.tsx"
+    - "**/pages/api/**/*.ts"
+    - "**/*.py"
+    - "**/*.js"
+    - "**/*.ts"
+  patterns:
+    - "export async function GET"
+    - "export async function POST"
+    - "@app.get("
+    - "@app.post("
+    - "router.get("
+    - "app.get("
+  nearby_terms:
+    - "admin"
+    - "delete"
+    - "billing"
+    - "users"
+    - "projects"
+  reason: "Sensitive-looking route handler that may need explicit auth and authorization review."
+  review_prompt: "Inspect direct handler and middleware context before deciding whether auth is missing."
+- id: user-controlled-url-fetch
+  category: ssrf
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.py"
+    - "**/*.go"
+  patterns:
+    - "fetch("
+    - "requests.get("
+    - "http.Get("
+    - "urlopen("
+  nearby_terms:
+    - "url"
+    - "webhook"
+    - "proxy"
+    - "preview"
+    - "import"
+  reason: "Potential user-controlled URL fetch or proxy path."
+  review_prompt: "Check URL origin, scheme, IP range, redirect, timeout, and response-size controls."
+- id: dynamic-query-construction
+  category: injection
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.js"
+    - "**/*.py"
+    - "**/*.go"
+    - "**/*.rb"
+  patterns:
+    - "execute(f"
+    - "query +"
+    - "$queryRawUnsafe"
+    - "db.raw("
+    - "fmt.Sprintf(\"SELECT"
+  nearby_terms:
+    - "select"
+    - "where"
+    - "order by"
+    - "input"
+  reason: "Potential dynamic query construction from untrusted input."
+  review_prompt: "Confirm dataflow and replace string construction with parameterized queries."
+- id: path-traversal-candidate
+  category: injection
+  severity_hint: medium
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.js"
+    - "**/*.py"
+    - "**/*.go"
+    - "**/*.rb"
+  patterns:
+    - "path.join("
+    - "open("
+    - "sendFile("
+    - "os.Open("
+    - "File.read("
+  nearby_terms:
+    - "filename"
+    - "path"
+    - "download"
+    - "upload"
+    - "archive"
+  reason: "Potential user-controlled file path or traversal candidate."
+  review_prompt: "Check canonicalization, base directory enforcement, and authorization for file access."
+- id: unsafe-eval-or-deserialization
+  category: injection
+  severity_hint: critical
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.js"
+    - "**/*.py"
+    - "**/*.rb"
+  patterns:
+    - "eval("
+    - "Function("
+    - "pickle.loads("
+    - "yaml.load("
+    - "Marshal.load("
+  nearby_terms:
+    - "input"
+    - "body"
+    - "params"
+    - "payload"
+  reason: "Potential unsafe code execution or deserialization."
+  review_prompt: "Confirm whether untrusted data reaches eval or unsafe deserialization."
