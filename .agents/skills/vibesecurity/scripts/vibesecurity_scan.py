@@ -1,28 +1,15 @@
 from __future__ import annotations
 
 import fnmatch
-import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
-JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
-JsonMap: TypeAlias = dict[str, JsonValue]
+from vibesecurity_common import JsonMap, MAX_CANDIDATES, read_text, redacted_snippet, rel_path, select_repo_files
+from vibesecurity_inventory import detect_inventory
 
-TEXT_SUFFIXES: Final = {
-    ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".py", ".go", ".rb", ".php", ".java",
-    ".cs", ".rs", ".yml", ".yaml", ".json", ".toml", ".env", ".md", ".txt", ".dockerfile", ".sh",
-}
-TEXT_NAMES: Final = {"Dockerfile", "package.json", "requirements.txt", "go.mod", "Cargo.toml", "pyproject.toml"}
-SKIP_PARTS: Final = {".git", "node_modules", ".venv", "venv", "dist", "build", "__pycache__"}
-MAX_FILE_BYTES: Final = 1_000_000
-MAX_CANDIDATES: Final = 200
-SECRET_ASSIGNMENT: Final = re.compile(
-    r"(?i)\b(api[_-]?key|token|secret|password|private[_-]?key|client[_-]?secret|jwt[_-]?secret)\b\s*[:=]\s*['\"]?[^'\"\s,;]+",
-)
-SECRET_TOKEN: Final = re.compile(r"\b(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b")
-
+NEARBY_WINDOW_LINES: Final = 6
 
 @dataclass(frozen=True, slots=True)
 class Matcher:
@@ -34,80 +21,23 @@ class Matcher:
     patterns: tuple[str, ...]
     nearby_terms: tuple[str, ...]
     reason: str
+    review_prompt: str
 
 
-def redact(text: str) -> str:
-    assigned = SECRET_ASSIGNMENT.sub(lambda item: f"{item.group(1)}=<redacted>", text)
-    return SECRET_TOKEN.sub("<redacted-token>", assigned)
+@dataclass(frozen=True, slots=True)
+class GitNames:
+    names: tuple[str, ...]
+    warnings: tuple[str, ...]
 
 
-def rel_path(root: Path, path: Path) -> str:
-    return path.relative_to(root).as_posix()
-
-
-def is_text_candidate(path: Path) -> bool:
-    try:
-        is_small = path.stat().st_size <= MAX_FILE_BYTES
-    except OSError:
-        return False
-    return is_small and (path.name in TEXT_NAMES or path.suffix.lower() in TEXT_SUFFIXES or ".github" in path.parts)
+@dataclass(frozen=True, slots=True)
+class ScanResult:
+    candidates: list[JsonMap]
+    truncated: bool
 
 
 def iter_repo_files(root: Path) -> list[Path]:
-    files: list[Path] = []
-    for path in sorted(root.rglob("*")):
-        parts = set(path.relative_to(root).parts)
-        if path.is_file() and not parts.intersection(SKIP_PARTS) and is_text_candidate(path):
-            files.append(path)
-    return files
-
-
-def read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="ignore")
-
-
-def language_for(path: Path) -> str:
-    suffix = path.suffix.lower()
-    mapping = {
-        ".ts": "typescript", ".tsx": "typescript", ".js": "javascript", ".jsx": "javascript", ".py": "python",
-        ".go": "go", ".rb": "ruby", ".rs": "rust", ".java": "java", ".cs": "csharp", ".php": "php",
-    }
-    return mapping.get(suffix, "")
-
-
-def detect_frameworks(text_all: str, files: list[Path]) -> set[str]:
-    frameworks: set[str] = set()
-    for marker, framework in (
-        ("next", "nextjs"), ("react", "react"), ("express", "express"), ("fastify", "fastify"),
-        ("@hono", "hono"), ("@nestjs", "nestjs"), ("fastapi", "fastapi"), ("django", "django"),
-        ("flask", "flask"), ("rails", "rails"),
-    ):
-        if marker in text_all:
-            frameworks.add(framework)
-    if any(path.name == "go.mod" for path in files):
-        frameworks.add("go-http")
-    return frameworks
-
-
-def route_like(rel: str) -> bool:
-    lower = rel.lower()
-    return "/api/" in lower or "routes" in lower or lower.endswith("urls.py") or lower.endswith("views.py")
-
-
-def detect_inventory(root: Path) -> JsonMap:
-    files = iter_repo_files(root)
-    rels = [rel_path(root, path) for path in files]
-    text_all = "\n".join(read_text(path).lower() for path in files)
-    languages = sorted({language for path in files if (language := language_for(path))})
-    ai_sdks = sorted(marker for marker in ("openai", "anthropic", "langchain", "pydantic-ai", "vercel-ai") if marker in text_all)
-    ci = ["github-actions"] if any(".github/workflows/" in item for item in rels) else []
-    return {
-        "languages": languages,
-        "frameworks": sorted(detect_frameworks(text_all, files)),
-        "ai_sdks": ai_sdks,
-        "ci": ci,
-        "route_files": sorted(item for item in rels if route_like(item))[:50],
-    }
+    return list(select_repo_files(root).files)
 
 
 def risk_categories_for_path(rel: str) -> list[str]:
@@ -124,19 +54,27 @@ def risk_categories_for_path(rel: str) -> list[str]:
     return sorted(categories) or ["general"]
 
 
-def run_git(root: Path, args: tuple[str, ...]) -> list[str]:
+def run_git(root: Path, args: tuple[str, ...]) -> GitNames:
+    label = "git " + " ".join(args)
     try:
         result = subprocess.run(("git", *args), cwd=root, check=True, capture_output=True, text=True)
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    except FileNotFoundError:
+        return GitNames(names=(), warnings=(f"{label} failed: git executable not found",))
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip().splitlines()
+        message = detail[0] if detail else "unknown git error"
+        return GitNames(names=(), warnings=(f"{label} failed: {message}",))
+    return GitNames(names=tuple(line.strip() for line in result.stdout.splitlines() if line.strip()), warnings=())
 
 
-def changed_files(root: Path) -> list[str]:
+def changed_files(root: Path) -> GitNames:
     names: list[str] = []
+    warnings: list[str] = []
     for args in (("diff", "--name-only"), ("diff", "--cached", "--name-only"), ("ls-files", "--others", "--exclude-standard")):
-        names.extend(run_git(root, args))
-    return sorted(set(names))
+        result = run_git(root, args)
+        names.extend(result.names)
+        warnings.extend(result.warnings)
+    return GitNames(names=tuple(sorted(set(names))), warnings=tuple(warnings))
 
 
 def load_matchers(root: Path) -> list[Matcher]:
@@ -195,6 +133,7 @@ def maybe_add_matcher(items: list[Matcher], draft: dict[str, str], lists: dict[s
             patterns=tuple(lists["patterns"]),
             nearby_terms=tuple(lists["nearby_terms"]),
             reason=draft.get("reason", "Potential security review candidate."),
+            review_prompt=draft.get("review_prompt", "Validate reachability, boundary crossing, and impact before confirming."),
         ))
 
 
@@ -204,57 +143,102 @@ def clean_value(value: str) -> str:
 
 def fallback_matchers() -> list[Matcher]:
     return [
-        Matcher("possible-secret-literal", "secrets", "high", "medium", ("**/*",), ("api_key", "private_key", "client_secret"), ("=", ":"), "Potential hardcoded secret."),
-        Matcher("ai-output-to-shell", "ai-agentic", "high", "medium", ("**/*.py", "**/*.ts", "**/*.js"), ("subprocess.", "os.system(", "child_process"), ("model", "openai", "agent"), "Potential model output to command execution."),
-        Matcher("github-actions-pr-target", "ci-cd", "high", "high", ("**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"), ("pull_request_target",), ("checkout", "run:"), "Privileged workflow may execute untrusted fork code."),
+        Matcher("possible-secret-literal", "secrets", "high", "medium", ("**/*",), ("api_key", "private_key", "client_secret"), ("=", ":"), "Potential hardcoded secret.", "Confirm whether the value is real without printing it."),
+        Matcher("ai-output-to-shell", "ai-agentic", "high", "medium", ("**/*.py", "**/*.ts", "**/*.js"), ("subprocess.", "os.system(", "child_process"), ("model", "openai", "agent"), "Potential model output to command execution.", "Confirm whether model output can influence command execution."),
+        Matcher("github-actions-pr-target", "ci-cd", "high", "high", ("**/.github/workflows/*.yml", "**/.github/workflows/*.yaml"), ("pull_request_target",), ("checkout", "run:"), "Privileged workflow may execute untrusted fork code.", "Confirm whether attacker-controlled code runs with trusted token or secrets."),
     ]
 
 
-def matcher_applies(matcher: Matcher, rel: str, content: str, line: str) -> bool:
+def matched_nearby_terms(matcher: Matcher, window_lines: list[str]) -> list[str]:
+    window = "\n".join(window_lines).lower()
+    return [term for term in matcher.nearby_terms if term.lower() in window]
+
+
+def glob_matches(rel: str, glob: str) -> bool:
+    if glob == "**/*":
+        return True
+    variants = {glob}
+    queue = [glob]
+    while queue:
+        item = queue.pop()
+        if "/**/" not in item:
+            continue
+        collapsed = item.replace("/**/", "/", 1)
+        if collapsed not in variants:
+            variants.add(collapsed)
+            queue.append(collapsed)
+    for variant in variants:
+        if fnmatch.fnmatch(rel, variant):
+            return True
+        if variant.startswith("**/") and fnmatch.fnmatch(rel, variant[3:]):
+            return True
+    return False
+
+
+def matcher_applies(matcher: Matcher, rel: str, line: str, window_lines: list[str]) -> bool:
     lower_line = line.lower()
-    lower_content = content.lower()
     return (
-        any(fnmatch.fnmatch(rel, glob) for glob in matcher.globs)
+        any(glob_matches(rel, glob) for glob in matcher.globs)
         and any(pattern.lower() in lower_line for pattern in matcher.patterns)
-        and (not matcher.nearby_terms or any(term.lower() in lower_content for term in matcher.nearby_terms))
+        and (not matcher.nearby_terms or bool(matched_nearby_terms(matcher, window_lines)))
     )
 
 
-def scan_candidates(root: Path) -> list[JsonMap]:
+def line_window(lines: list[str], line_index: int) -> list[str]:
+    start = max(0, line_index - NEARBY_WINDOW_LINES)
+    stop = min(len(lines), line_index + NEARBY_WINDOW_LINES + 1)
+    return lines[start:stop]
+
+
+def scan_candidates(root: Path) -> ScanResult:
     candidates: list[JsonMap] = []
     matchers = load_matchers(root)
     for path in iter_repo_files(root):
         rel = rel_path(root, path)
-        content = read_text(path)
-        for line_number, line in enumerate(content.splitlines(), start=1):
+        lines = read_text(path).splitlines()
+        for line_index, line in enumerate(lines):
+            window = line_window(lines, line_index)
             for matcher in matchers:
-                if matcher_applies(matcher, rel, content, line):
+                if matcher_applies(matcher, rel, line, window):
                     candidates.append({
                         "matcher_id": matcher.matcher_id,
                         "path": rel,
-                        "line": line_number,
-                        "snippet_redacted": redact(line.strip())[:180],
+                        "line": line_index + 1,
+                        "snippet_redacted": redacted_snippet(path, line),
+                        "nearby_terms_matched": matched_nearby_terms(matcher, window),
                         "reason": matcher.reason,
+                        "review_prompt": matcher.review_prompt,
                         "category": matcher.category,
                         "severity_hint": matcher.severity_hint,
                         "confidence_hint": matcher.confidence_hint,
+                        "status": "needs-review",
                     })
                     if len(candidates) >= MAX_CANDIDATES:
-                        return candidates
-    return candidates
+                        return ScanResult(candidates=candidates, truncated=True)
+    return ScanResult(candidates=candidates, truncated=False)
 
 
 def inventory_payload(root: Path) -> JsonMap:
-    return {"project": detect_inventory(root), "scope": {"mode": "inventory", "files_considered": [], "files_skipped": []}, "candidates": []}
+    selection = select_repo_files(root)
+    return {"project": detect_inventory(root), "scope": {"mode": "inventory", "files_considered": [], "files_skipped": selection.skipped_json()}, "candidates": []}
 
 
 def diff_payload(root: Path) -> JsonMap:
-    files = changed_files(root)
-    changed = [{"path": item, "risk_categories": risk_categories_for_path(item)} for item in files]
-    return {"project": detect_inventory(root), "scope": {"mode": "diff", "files_considered": files, "files_skipped": []}, "changed_files": changed, "candidates": []}
+    selection = select_repo_files(root)
+    result = changed_files(root)
+    changed = [{"path": item, "risk_categories": risk_categories_for_path(item)} for item in result.names]
+    return {"project": detect_inventory(root), "scope": {"mode": "diff", "files_considered": list(result.names), "files_skipped": selection.skipped_json()}, "changed_files": changed, "warnings": list(result.warnings), "candidates": []}
 
 
 def scan_payload(root: Path) -> JsonMap:
-    candidates = scan_candidates(root)
-    files = sorted({candidate["path"] for candidate in candidates if isinstance(candidate.get("path"), str)})
-    return {"project": detect_inventory(root), "scope": {"mode": "scan", "files_considered": files, "files_skipped": []}, "candidates": candidates}
+    selection = select_repo_files(root)
+    result = scan_candidates(root)
+    files = sorted({candidate["path"] for candidate in result.candidates if isinstance(candidate.get("path"), str)})
+    return {
+        "project": detect_inventory(root),
+        "scope": {"mode": "scan", "files_considered": files, "files_skipped": selection.skipped_json()},
+        "truncated": result.truncated,
+        "candidate_limit": MAX_CANDIDATES,
+        "candidates_returned": len(result.candidates),
+        "candidates": result.candidates,
+    }

@@ -5,5 +5,7 @@ __pycache__/
 .ruff_cache/
 .vibesecurity/
 .vibesec/
+.omo/
 .codegraph/
 vibesec-skill-conceptualization-plan.md
+vibesecurity-review.md

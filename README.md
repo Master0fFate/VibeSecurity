@@ -31,7 +31,9 @@ Then invoke it from your agent:
 $vibesecurity diff
 ```
 
-## Commands
+## Agent Commands
+
+These commands are handled by your coding agent after it loads the `vibesecurity` skill. They are not Python CLI subcommands.
 
 ```text
 $vibesecurity brief
@@ -44,9 +46,25 @@ $vibesecurity fix VSEC-0001
 $vibesecurity teach
 ```
 
+Agent-to-helper mapping:
+
+- `$vibesecurity diff` may call `python .agents/skills/vibesecurity/scripts/vibesecurity.py diff`.
+- `$vibesecurity scan` may call `python .agents/skills/vibesecurity/scripts/vibesecurity.py scan`.
+- `$vibesecurity recheck` may call `scan` and `report`, then manually validate status.
+- `$vibesecurity brief`, `deep`, `ai`, `fix`, and `teach` are agent workflows guided by the references.
+
 ## Optional Local Helper
 
 The helper is read-only by default, has no third-party dependencies, and uses only the Python standard library.
+
+Supported local helper commands are:
+
+```text
+inventory
+diff
+scan
+report
+```
 
 ```bash
 python .agents/skills/vibesecurity/scripts/vibesecurity.py inventory
@@ -55,7 +73,7 @@ python .agents/skills/vibesecurity/scripts/vibesecurity.py scan
 python .agents/skills/vibesecurity/scripts/vibesecurity.py report --input .vibesecurity/findings.json
 ```
 
-`scan` returns candidates, not final findings. Your agent still has to validate code paths before reporting a vulnerability.
+`scan` returns candidates, not final findings. The payload includes `truncated`, `candidate_limit`, `candidates_returned`, skipped-file coverage, and git warnings when applicable. Your agent still has to validate code paths before reporting a vulnerability.
 
 ## Smoke Tests
 
@@ -65,6 +83,7 @@ Run the bundled fixtures:
 PYTHONDONTWRITEBYTECODE=1 python .agents/skills/vibesecurity/scripts/vibesecurity.py inventory --root .agents/skills/vibesecurity/tests/fixtures
 PYTHONDONTWRITEBYTECODE=1 python .agents/skills/vibesecurity/scripts/vibesecurity.py scan --root .agents/skills/vibesecurity/tests/fixtures
 PYTHONDONTWRITEBYTECODE=1 python .agents/skills/vibesecurity/scripts/vibesecurity.py report --input .agents/skills/vibesecurity/tests/expected/findings.json
+PYTHONDONTWRITEBYTECODE=1 python .agents/skills/vibesecurity/tests/run_tests.py
 ```
 
 Expected candidate classes include:

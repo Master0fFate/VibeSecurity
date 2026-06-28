@@ -19,8 +19,9 @@ import json
 import sys
 from pathlib import Path
 
+from vibesecurity_common import JsonMap, redact
 from vibesecurity_report import report_payload
-from vibesecurity_scan import JsonMap, diff_payload, inventory_payload, redact, scan_payload
+from vibesecurity_scan import diff_payload, inventory_payload, scan_payload
 
 
 def command_payload(args: argparse.Namespace) -> JsonMap:
