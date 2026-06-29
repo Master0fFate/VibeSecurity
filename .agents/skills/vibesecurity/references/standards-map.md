@@ -19,3 +19,15 @@ Use standards as supporting context, not filler. Map a finding only when it clar
 ## Supply Chain
 
 - SLSA-style concepts: source integrity, build integrity, dependency provenance, package tampering resistance, CI/CD permissions, reproducibility, and pinned or signed actions where practical.
+
+## Source Anchors
+
+- OWASP ASVS: `https://owasp.org/www-project-application-security-verification-standard/`
+- OWASP Cheat Sheet Series: `https://cheatsheetseries.owasp.org/`
+- OWASP Code Review Guide: `https://owasp.org/www-project-code-review-guide/`
+- OWASP LLM Top 10: `https://genai.owasp.org/llm-top-10/`
+- OWASP LLMSVS: `https://owasp.org/www-project-llm-verification-standard/`
+- NIST SSDF SP 800-218: `https://csrc.nist.gov/pubs/sp/800/218/final`
+- NIST SP 800-218A: `https://csrc.nist.gov/pubs/sp/800/218/a/final`
+- CISA Secure by Design: `https://www.cisa.gov/resources-tools/resources/secure-by-design`
+- SLSA: `https://slsa.dev/`

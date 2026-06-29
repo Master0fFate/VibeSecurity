@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 from vibesecurity_common import JsonMap, redact
+from vibesecurity_remediation import fix_plan_payload
 from vibesecurity_report import report_payload
 from vibesecurity_scan import diff_payload, inventory_payload, scan_payload
 
@@ -35,16 +36,20 @@ def command_payload(args: argparse.Namespace) -> JsonMap:
             return scan_payload(root)
         case "report":
             return report_payload(Path(args.input), Path(args.output) if args.output else None)
+        case "fix-plan":
+            return fix_plan_payload(Path(args.input), str(args.finding), bool(args.review_only))
         case _:
             raise SystemExit(f"unknown command: {args.command}")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibesecurity.py")
-    parser.add_argument("command", choices=["inventory", "diff", "scan", "report"])
+    parser.add_argument("command", choices=["inventory", "diff", "scan", "report", "fix-plan"])
     parser.add_argument("--root", default=".", help="Repository root to inspect.")
     parser.add_argument("--input", default=".vibesecurity/findings.json", help="Findings JSON for report rendering.")
     parser.add_argument("--output", default="", help="Optional Markdown report output path.")
+    parser.add_argument("--finding", default="all", help="Finding id or matcher id to plan; defaults to all.")
+    parser.add_argument("--review-only", action="store_true", help="Render remediation guidance without patch-ready output.")
     return parser
 
 

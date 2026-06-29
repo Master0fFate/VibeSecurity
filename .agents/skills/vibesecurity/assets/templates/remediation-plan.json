@@ -1,0 +1,30 @@
+{
+  "selected_finding": "all",
+  "review_only": false,
+  "patch_ready": [
+    {
+      "id": "VSEC-0001",
+      "title": "Short actionable title",
+      "severity": "high",
+      "confidence": "high",
+      "category": "authz",
+      "status": "confirmed",
+      "patch_allowed": true,
+      "security_invariant": "Sensitive actions and objects must be authorized against the current principal and tenant before data is returned or mutated.",
+      "remediation_steps": [
+        "Add an explicit authorization check at the route, service, or policy boundary.",
+        "Add a regression test for allowed and denied principals."
+      ],
+      "verification": "Run the regression test, rerun VibeSecurity scan or recheck, and manually re-read the affected code path.",
+      "standards": "OWASP ASVS V4"
+    }
+  ],
+  "blocked": [
+    {
+      "id": "missing-auth-route-candidate",
+      "status": "needs-review",
+      "category": "authz",
+      "reason": "not patch-ready: validate reachability, boundary crossing, impact, and verification before remediation"
+    }
+  ]
+}

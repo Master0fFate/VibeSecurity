@@ -13,7 +13,7 @@ Review owned or authorized code defensively. Do not exploit third-party systems,
 2. Escalate only on evidence: inspect reachable code paths before making a finding.
 3. State exact evidence: file, line or symbol, reachable scenario, impact, remediation, and verification.
 4. Keep context small: load only the references needed for the active command.
-5. Prefer no writes: write `.vibesecurity/` reports only when explicitly requested.
+5. Patch confirmed findings when the user asks for fixing, patching, remediation, or auto-fix; use review-only mode when the user asks only for a review.
 6. Treat secrets as toxic: redact likely secret values in output.
 7. Never report a vulnerability from a matcher alone; confirm data flow and boundary crossing.
 
@@ -24,7 +24,7 @@ Review owned or authorized code defensively. Do not exploit third-party systems,
 - `$vibesecurity scan` - run the local deterministic helper and manually validate ranked candidates.
 - `$vibesecurity deep <scope>` - perform targeted deep review of a path, feature, or risk class.
 - `$vibesecurity recheck` - verify fixes or existing findings.
-- `$vibesecurity fix <finding-id>` - propose or apply remediation for a confirmed finding.
+- `$vibesecurity fix <finding-id|all> [--review-only]` - apply guarded remediation for confirmed findings, or render a non-writing remediation plan.
 - `$vibesecurity teach` - convert confirmed true positives into local matchers.
 - `$vibesecurity ai [scope]` - review AI/LLM/agentic security risks.
 
@@ -35,7 +35,7 @@ Review owned or authorized code defensively. Do not exploit third-party systems,
 3. Read only the smallest category reference that matches the code under review.
 4. Inspect candidate code plus direct auth, schema, route, model, tool, or workflow support context.
 5. Report confirmed findings first. Put unconfirmed matcher hits under coverage or candidate notes.
-6. If fixing, explain the security invariant, patch minimally, add or update tests when possible, then recheck.
+6. If fixing, load `references/remediation-playbook.md`, run `fix-plan` when a findings file exists, explain the security invariant, patch minimally, add or update tests when possible, then recheck.
 
 ## Reference Loading
 
@@ -48,6 +48,7 @@ Load only when relevant:
 
 - Command behavior: `references/command-map.md`
 - Reporting: `references/reporting-rules.md`, `assets/templates/report.md`, `assets/templates/finding.json`
+- Remediation: `references/remediation-playbook.md`, `assets/templates/remediation-plan.json`
 - Web/API: `references/web-api-checklist.md`
 - AI/agentic: `references/ai-agentic-checklist.md`
 - Supply chain: `references/supply-chain-checklist.md`

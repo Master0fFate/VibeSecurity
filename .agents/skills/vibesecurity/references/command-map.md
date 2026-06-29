@@ -20,9 +20,22 @@ Require a path, feature, or risk class. Cap context to the scoped files plus dir
 
 Re-read affected files and tests. Mark each finding fixed, unresolved, false-positive, or uncertain. Do not claim a fix without code evidence.
 
-## `$vibesecurity fix <finding-id>`
+## `$vibesecurity fix <finding-id|all> [--review-only]`
 
-Explain the security invariant, patch minimally only when the user wants edits, add or update tests where possible, then recheck.
+Apply guarded remediation for a confirmed finding, or render a remediation plan when the user requests review-only.
+
+Rules:
+
+- Load `references/remediation-playbook.md`.
+- If a findings file exists, run `python .agents/skills/vibesecurity/scripts/vibesecurity.py fix-plan --input .vibesecurity/findings.json --finding <finding-id|all>`.
+- Patch only `status: confirmed` findings. Keep matcher hits and `needs-review` items blocked until reachability, boundary crossing, impact, and verification are validated.
+- If the user says review-only, run `fix-plan --review-only`, report the plan, and do not edit files.
+- Explain the security invariant before patching, patch minimally, add or update tests when possible, then recheck.
+- Never claim a finding is fixed without re-reading changed code and verification output.
+
+## `$vibesecurity patch <finding-id>`
+
+Alias the workflow to `$vibesecurity fix <finding-id>` when the user says patch, remediate, auto-fix, or fix vulnerabilities.
 
 ## `$vibesecurity teach`
 

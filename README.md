@@ -16,7 +16,33 @@ Use it when you want:
 - **Web/API coverage**: auth, object-level authorization, SSRF, injection, XSS, file paths, secrets, supply chain, and CI/CD risks.
 - **Evidence-backed findings**: matchers create review candidates; the agent must confirm reachability, boundary crossing, impact, and remediation before calling something a vulnerability.
 
-## Install
+## Install With `skills`
+
+The easiest install path is the open `skills` CLI:
+
+```bash
+npx skills add Master0fFate/VibeSecurity --skill vibesecurity
+```
+
+Useful variants:
+
+```bash
+# Install globally for detected compatible agents
+npx skills add Master0fFate/VibeSecurity --skill vibesecurity --global --yes
+
+# Install to a specific agent
+npx skills add Master0fFate/VibeSecurity --skill vibesecurity --agent codex --global --yes
+
+# Install to every supported agent target without prompts
+npx skills add Master0fFate/VibeSecurity --skill vibesecurity --agent '*' --global --yes
+
+# Inspect what the package exposes before installing
+npx skills add Master0fFate/VibeSecurity --list
+```
+
+`skills` discovers VibeSecurity from `.agents/skills/vibesecurity/SKILL.md`, so the GitHub repository itself is the installable skill package. No npm package, SaaS account, API key, or build step is required.
+
+## Manual Install
 
 Copy the skill folder into any repository:
 
@@ -43,6 +69,7 @@ $vibesecurity deep src/app/api/billing
 $vibesecurity ai src/agent
 $vibesecurity recheck
 $vibesecurity fix VSEC-0001
+$vibesecurity fix all --review-only
 $vibesecurity teach
 ```
 
@@ -51,7 +78,10 @@ Agent-to-helper mapping:
 - `$vibesecurity diff` may call `python .agents/skills/vibesecurity/scripts/vibesecurity.py diff`.
 - `$vibesecurity scan` may call `python .agents/skills/vibesecurity/scripts/vibesecurity.py scan`.
 - `$vibesecurity recheck` may call `scan` and `report`, then manually validate status.
-- `$vibesecurity brief`, `deep`, `ai`, `fix`, and `teach` are agent workflows guided by the references.
+- `$vibesecurity fix` may call `python .agents/skills/vibesecurity/scripts/vibesecurity.py fix-plan` before the agent applies patches to confirmed findings.
+- `$vibesecurity brief`, `deep`, `ai`, and `teach` are agent workflows guided by the references.
+
+`fix` is the remediation lane: it patches confirmed findings when you ask for a fix, patch, remediation, or auto-fix. It does not patch raw scan candidates. Use `--review-only` when you want the remediation plan without file edits.
 
 ## Optional Local Helper
 
@@ -64,6 +94,7 @@ inventory
 diff
 scan
 report
+fix-plan
 ```
 
 ```bash
@@ -71,9 +102,13 @@ python .agents/skills/vibesecurity/scripts/vibesecurity.py inventory
 python .agents/skills/vibesecurity/scripts/vibesecurity.py diff
 python .agents/skills/vibesecurity/scripts/vibesecurity.py scan
 python .agents/skills/vibesecurity/scripts/vibesecurity.py report --input .vibesecurity/findings.json
+python .agents/skills/vibesecurity/scripts/vibesecurity.py fix-plan --input .vibesecurity/findings.json --finding all
+python .agents/skills/vibesecurity/scripts/vibesecurity.py fix-plan --input .vibesecurity/findings.json --finding VSEC-0001 --review-only
 ```
 
 `scan` returns candidates, not final findings. The payload includes `truncated`, `candidate_limit`, `candidates_returned`, skipped-file coverage, and git warnings when applicable. Your agent still has to validate code paths before reporting a vulnerability.
+
+`fix-plan` returns patch-ready guidance only for `status: confirmed` findings. It blocks `needs-review` candidates so automated remediation cannot silently turn a matcher hit into a source edit.
 
 ## Smoke Tests
 

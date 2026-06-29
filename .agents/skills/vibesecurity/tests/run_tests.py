@@ -12,6 +12,7 @@ FIXTURES = SKILL_ROOT / "tests" / "fixtures"
 sys.path.insert(0, str(SCRIPTS))
 
 from vibesecurity_report import report_payload, report_sections_from_json, render_report
+from vibesecurity_remediation import fix_plan_payload
 from vibesecurity_scan import diff_payload, glob_matches, inventory_payload, scan_payload
 
 
@@ -201,6 +202,48 @@ def test_report_redacts_metadata_fields() -> None:
     assert "pathpass" not in report
 
 
+def test_fix_plan_requires_confirmed_findings() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        input_path = Path(tmp) / "findings.json"
+        write(input_path, json.dumps({
+            "findings": [
+                {"id": "VSEC-0001", "status": "confirmed", "category": "authz", "title": "Missing object authorization", "verification": "Denied user gets 403."},
+                {"id": "VSEC-0002", "status": "needs-review", "category": "ssrf", "title": "Candidate fetch"},
+            ],
+            "candidates": [{"matcher_id": "possible-secret-literal", "status": "needs-review", "category": "secrets"}],
+        }))
+
+        payload = fix_plan_payload(input_path, "all", False)
+
+    patch_ready = payload["patch_ready"]
+    blocked = payload["blocked"]
+    assert isinstance(patch_ready, list)
+    assert isinstance(blocked, list)
+    assert len(patch_ready) == 1
+    assert len(blocked) == 2
+    first = patch_ready[0]
+    assert isinstance(first, dict)
+    assert first["id"] == "VSEC-0001"
+    assert first["patch_allowed"] is True
+    assert "authorized" in str(first["security_invariant"]).lower()
+
+
+def test_fix_plan_review_only_blocks_patch_ready_output() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        input_path = Path(tmp) / "findings.json"
+        write(input_path, json.dumps({"findings": [{"id": "VSEC-0001", "status": "confirmed", "category": "ai-agentic", "title": "Unsafe tool use"}]}))
+
+        payload = fix_plan_payload(input_path, "VSEC-0001", True)
+
+    assert payload["patch_ready"] == []
+    review_items = payload["review_items"]
+    assert isinstance(review_items, list)
+    assert len(review_items) == 1
+    first = review_items[0]
+    assert isinstance(first, dict)
+    assert first["patch_allowed"] is False
+
+
 def test_symlinks_are_skipped_when_supported() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp) / "repo"
@@ -254,6 +297,8 @@ def main() -> int:
         test_report_merges_findings_and_top_level_candidates,
         test_report_redacts_common_secret_formats,
         test_report_redacts_metadata_fields,
+        test_fix_plan_requires_confirmed_findings,
+        test_fix_plan_review_only_blocks_patch_ready_output,
         test_symlinks_are_skipped_when_supported,
         test_local_vibesecurity_state_is_skipped,
         test_glob_matches_middle_double_star_without_directory,
