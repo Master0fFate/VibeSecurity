@@ -1,8 +1,8 @@
 # VibeSecurity
 
-> A lightweight defensive security review skill for vibe-coded repositories.
+> A defensive security review skill pack for arbitrary repositories and worktrees.
 
-VibeSecurity gives your coding agent a focused security-review brain without turning your project into a scanner platform. Drop the skill into `.agents/skills/`, invoke `$vibesecurity`, and review diffs, routes, AI agents, dependencies, secrets, and CI/CD workflows with evidence-first discipline.
+VibeSecurity gives your coding agent a focused security-review brain without turning your project into a scanner platform or plugin runtime. Drop the skill into `.agents/skills/`, invoke `$vibesecurity`, and review diffs, routes, AI agents, dependencies, secrets, infrastructure, and CI/CD workflows with evidence-first discipline.
 
 ## Why Use It?
 
@@ -13,7 +13,7 @@ Use it when you want:
 - **Defensive review without ceremony**: no npm package, SaaS account, gateway key, worker service, or cloud sandbox.
 - **Lower token burn**: deterministic candidate discovery first, then targeted agent review only where risk appears.
 - **AI-agent security coverage**: prompt injection, excessive agency, unsafe tool calls, retrieval authorization, secrets in prompts, and cost abuse.
-- **Web/API coverage**: auth, object-level authorization, SSRF, injection, XSS, file paths, secrets, supply chain, and CI/CD risks.
+- **Generic repository coverage**: language/workflow profiling, web/API auth, object-level authorization, SSRF, injection, XSS, file paths, secrets, supply chain, AI-agentic, infrastructure, and CI/CD risks.
 - **Evidence-backed findings**: matchers create review candidates; the agent must confirm reachability, boundary crossing, impact, and remediation before calling something a vulnerability.
 
 ## Install With `skills`
@@ -41,6 +41,25 @@ npx skills add Master0fFate/VibeSecurity --list
 ```
 
 `skills` discovers VibeSecurity from `.agents/skills/vibesecurity/SKILL.md`, so the GitHub repository itself is the installable skill package. No npm package, SaaS account, API key, or build step is required.
+
+## Requirements
+
+Hard requirements:
+
+- Code you own or are authorized to review.
+- A coding agent that supports local skills installed from `.agents/skills/`.
+- Node.js with `npx` for the `skills` CLI install path, or a manual copy of the skill folder.
+- Python 3.11+ to run the optional local helper commands.
+- Git for `$vibesecurity diff` risk classification.
+
+Optional coverage enhancers:
+
+- `sg` / ast-grep for AST-aware local checks.
+- Semgrep for external rule packs.
+- Gitleaks for dedicated secret scanning.
+- `npm audit`, pip-audit, and cargo-audit for ecosystem dependency checks.
+
+Missing optional tools do not break installation or scanning. VibeSecurity reports unavailable analyzers as coverage caveats and falls back to bundled rule packs plus manual agent validation.
 
 ## Manual Install
 
@@ -106,7 +125,7 @@ python .agents/skills/vibesecurity/scripts/vibesecurity.py fix-plan --input .vib
 python .agents/skills/vibesecurity/scripts/vibesecurity.py fix-plan --input .vibesecurity/findings.json --finding VSEC-0001 --review-only
 ```
 
-`scan` returns candidates, not final findings. The payload includes `truncated`, `candidate_limit`, `candidates_returned`, skipped-file coverage, and git warnings when applicable. Your agent still has to validate code paths before reporting a vulnerability.
+`scan` returns candidates, not final findings. The payload includes `project` profiling, `scope.coverage`, `rule_packs`, `matchers_loaded`, `truncated`, `candidate_limit`, `candidates_total`, `candidates_returned`, skipped-file coverage, optional analyzer availability, and candidate priority metadata. Your agent still has to validate code paths before reporting a vulnerability.
 
 `fix-plan` returns patch-ready guidance only for `status: confirmed` findings. It blocks `needs-review` candidates so automated remediation cannot silently turn a matcher hit into a source edit.
 
@@ -131,12 +150,30 @@ Expected candidate classes include:
 ## What Is Included?
 
 - `SKILL.md` with command routing, safety boundaries, and reference-loading rules.
-- Focused references for web/API, AI-agentic, supply-chain, secrets, and CI/CD review.
-- Framework notes for Next.js, React, Express, Fastify, Hono, NestJS, FastAPI, Django, Flask, Rails, and Go HTTP.
+- Focused references for web/API, AI-agentic, supply-chain, secrets, CI/CD, and coverage-truth review.
+- Framework notes for Next.js, React, Express, Fastify, Hono, NestJS, FastAPI, Django, Flask, Rails, Go HTTP, and adjacent generic surfaces discovered by inventory.
 - Small examples for missing auth, object-level auth, SSRF, LLM-output-to-shell, RAG prompt injection, and privileged PR workflows.
-- Matcher catalogs that find high-signal candidates without claiming scanner certainty.
+- Matcher catalogs that find high-signal candidates across TypeScript, JavaScript, Python, Go, Ruby, Rust, Java, C#, PHP, GitHub Actions, GitLab CI, Jenkins, Docker, Kubernetes, and Terraform without claiming scanner certainty.
 - Templates for findings, matchers, project profiles, and reports.
 - Fixtures that prove the helper catches useful signals without full-repo AI review.
+
+## Skill-Pack Architecture
+
+VibeSecurity remains an installable skill set:
+
+```text
+.agents/skills/vibesecurity/
+  SKILL.md
+  references/
+  references/matchers/
+  scripts/
+  assets/templates/
+  tests/
+```
+
+The helper is a progressively enhanced local candidate engine. It uses bundled YAML matcher packs and Python standard-library code by default. If local analyzers such as `sg`, Semgrep, Gitleaks, npm audit, pip-audit, or cargo-audit are installed, the helper reports their availability as coverage metadata; missing tools do not break installation or scanning.
+
+Coverage is explicit. Inventory and scan payloads classify detected languages and workflows as `candidate-detector`, `profile-only`, or `unsupported`. Reports preserve those caveats so VibeSecurity does not imply broad coverage when only a narrow detector path ran.
 
 ## Safety Boundaries
 

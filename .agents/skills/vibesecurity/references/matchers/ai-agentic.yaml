@@ -7,12 +7,23 @@
     - "**/*.tsx"
     - "**/*.js"
     - "**/*.py"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+    - "**/*.php"
+    - "**/*.rs"
   patterns:
     - "subprocess."
     - "os.system("
     - "exec("
     - "spawn("
     - "child_process"
+    - "exec.Command("
+    - "Runtime.getRuntime().exec"
+    - "ProcessBuilder"
+    - "shell_exec("
+    - "Command::new("
   nearby_terms:
     - "openai"
     - "anthropic"
@@ -31,12 +42,20 @@
     - "**/*.tsx"
     - "**/*.js"
     - "**/*.py"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+    - "**/*.php"
   patterns:
     - "tools:"
     - "tool_calls"
     - "function_call"
     - "runTools("
     - "agent.run"
+    - "tool_choice"
+    - "execute_tool"
+    - "invokeTool"
   nearby_terms:
     - "delete"
     - "deploy"
@@ -55,6 +74,11 @@
     - "**/*.tsx"
     - "**/*.js"
     - "**/*.py"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+    - "**/*.php"
   patterns:
     - "retriever"
     - "vector"
@@ -68,3 +92,59 @@
     - "tools"
   reason: "Potential indirect prompt injection if retrieved content is treated as instructions."
   review_prompt: "Check whether retrieved content is quoted as untrusted data and whether tools remain constrained."
+- id: model-output-to-browser-or-file
+  category: ai-agentic
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.py"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+    - "**/*.php"
+  patterns:
+    - "writeFile"
+    - "open("
+    - "innerHTML"
+    - "dangerouslySetInnerHTML"
+    - "browser"
+    - "page."
+  nearby_terms:
+    - "model"
+    - "completion"
+    - "assistant"
+    - "llm"
+    - "tool"
+  reason: "Potential model output used as browser instruction, HTML, or filesystem input."
+  review_prompt: "Confirm structured validation, allowlisted paths/actions, and approval gates before model output reaches the sink."
+- id: agent-cost-or-resource-boundary
+  category: availability
+  severity_hint: medium
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.py"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+  patterns:
+    - "max_tokens"
+    - "while True"
+    - "for await"
+    - "stream"
+    - "retry"
+  nearby_terms:
+    - "openai"
+    - "anthropic"
+    - "agent"
+    - "completion"
+    - "tool"
+  reason: "Potential denial-of-wallet or runaway agent resource path."
+  review_prompt: "Check quotas, timeouts, input limits, retry bounds, cancellation, and user/tenant cost attribution."

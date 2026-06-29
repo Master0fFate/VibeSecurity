@@ -33,9 +33,10 @@ Review owned or authorized code defensively. Do not exploit third-party systems,
 1. Load `references/security-rubric.md` and `references/finding-schema.md` before emitting findings.
 2. For `$vibesecurity scan`, run `python .agents/skills/vibesecurity/scripts/vibesecurity.py scan` when local execution is appropriate.
 3. Read only the smallest category reference that matches the code under review.
-4. Inspect candidate code plus direct auth, schema, route, model, tool, or workflow support context.
-5. Report confirmed findings first. Put unconfirmed matcher hits under coverage or candidate notes.
-6. If fixing, load `references/remediation-playbook.md`, run `fix-plan` when a findings file exists, explain the security invariant, patch minimally, add or update tests when possible, then recheck.
+4. Inspect helper `project`, `scope.coverage`, `rule_packs`, `files_skipped`, `truncated`, and `unsupported_or_profile_only` before judging coverage.
+5. Inspect candidate code plus direct auth, schema, route, model, tool, or workflow support context.
+6. Report confirmed findings first. Put unconfirmed matcher hits under coverage or candidate notes.
+7. If fixing, load `references/remediation-playbook.md`, run `fix-plan` when a findings file exists, explain the security invariant, patch minimally, add or update tests when possible, then recheck.
 
 ## Reference Loading
 
@@ -54,6 +55,7 @@ Load only when relevant:
 - Supply chain: `references/supply-chain-checklist.md`
 - CI/CD: `references/ci-cd-checklist.md`
 - Secrets: `references/secrets-checklist.md`
+- Coverage truth: `references/coverage-matrix.md`
 - Standards mapping: `references/standards-map.md`
 - Framework specifics: one matching file under `references/framework-notes/`
 - Examples: one matching file under `references/examples/`
@@ -63,7 +65,7 @@ Do not load all framework notes, examples, or matchers at once.
 
 ## Output Requirements
 
-For each finding include ID, title, severity, confidence, status, category, affected files, evidence, attack scenario, impact, recommendation, verification, and useful standards mapping. If no finding is confirmed, state what was reviewed, what was skipped, and any coverage caveats.
+For each finding include ID, title, severity, confidence, status, category, affected files, evidence, attack scenario, impact, recommendation, verification, and useful standards mapping. If no finding is confirmed, state what was reviewed, what was skipped, which rule packs ran, and any unsupported/profile-only surfaces.
 
 ## Safety Boundaries
 

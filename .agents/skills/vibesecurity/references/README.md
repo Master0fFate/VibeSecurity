@@ -14,6 +14,7 @@ Load references only when the active review needs them.
 | Supply chain review | `supply-chain-checklist.md` |
 | Secrets review | `secrets-checklist.md` |
 | CI/CD review | `ci-cd-checklist.md` |
+| Coverage caveats | `coverage-matrix.md` |
 | Framework-specific risk | one file in `framework-notes/` |
 | Learning from findings | `matchers/local-project.yaml` plus `assets/templates/matcher.yaml` |
 

@@ -49,3 +49,102 @@
     - "install"
   reason: "Install or build script may execute unexpected code."
   review_prompt: "Inspect script source, trust boundary, and whether network downloads or shell pipes are necessary."
+- id: gitlab-ci-secret-boundary
+  category: ci-cd
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/.gitlab-ci.yml"
+    - "**/.gitlab-ci.yaml"
+  patterns:
+    - "script:"
+    - "curl"
+    - "docker:dind"
+    - "privileged: true"
+  nearby_terms:
+    - "deploy"
+    - "secret"
+    - "token"
+    - "protected"
+    - "environment"
+  reason: "GitLab CI job may mix untrusted code execution with privileged deployment or secrets."
+  review_prompt: "Check protected refs, secret exposure, includes, artifacts, and deployment environment approvals."
+- id: jenkins-shell-or-secret-boundary
+  category: ci-cd
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/Jenkinsfile"
+  patterns:
+    - "sh "
+    - "bat "
+    - "withCredentials"
+    - "checkout"
+  nearby_terms:
+    - "deploy"
+    - "secret"
+    - "token"
+    - "pull"
+    - "branch"
+  reason: "Jenkins pipeline may execute branch-controlled code near credentials or deployment."
+  review_prompt: "Check branch trust, credential scope, shell interpolation, and deployment gates."
+- id: docker-unpinned-or-remote-script
+  category: supply-chain
+  severity_hint: medium
+  confidence_hint: medium
+  globs:
+    - "**/Dockerfile"
+    - "**/*.dockerfile"
+  patterns:
+    - "FROM "
+    - "curl "
+    - "wget "
+    - "ADD http"
+  nearby_terms:
+    - "latest"
+    - "| sh"
+    - "| bash"
+    - "chmod +x"
+  reason: "Container build may use mutable base images or execute remote scripts."
+  review_prompt: "Check base-image pinning, provenance, remote downloads, and whether secrets can enter image layers."
+- id: terraform-public-or-wildcard-access
+  category: supply-chain
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.tf"
+    - "**/*.tfvars"
+  patterns:
+    - "0.0.0.0/0"
+    - "::/0"
+    - "Principal"
+    - "Action"
+  nearby_terms:
+    - "*"
+    - "ingress"
+    - "cidr"
+    - "iam"
+    - "policy"
+    - "public"
+  reason: "Infrastructure-as-code may expose public network or wildcard IAM access."
+  review_prompt: "Check whether the public or wildcard access is required, scoped, and protected by environment controls."
+- id: kubernetes-privileged-workload
+  category: supply-chain
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.yml"
+    - "**/*.yaml"
+  patterns:
+    - "privileged:"
+    - "hostPath:"
+    - "hostNetwork:"
+    - "runAsUser: 0"
+  nearby_terms:
+    - "kind:"
+    - "container"
+    - "pod"
+    - "deployment"
+    - "securityContext"
+  reason: "Kubernetes workload may request privileged host access."
+  review_prompt: "Check pod security context, host mounts, namespace/RBAC scope, and whether privileged access is required."

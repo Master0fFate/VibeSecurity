@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 
 from vibesecurity_common import JsonMap, JsonValue, redact
+from vibesecurity_report_context import render_coverage_notes, render_scope
 
 
 def as_map(value: JsonValue) -> JsonMap | None:
@@ -28,6 +28,8 @@ class ReportSections:
     confirmed: list[JsonMap]
     resolved: list[JsonMap]
     candidates: list[JsonMap]
+    project: JsonMap
+    scope: JsonMap
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,13 +47,15 @@ def is_candidate(item: JsonMap) -> bool:
     return item.get("status", "needs-review") == "needs-review"
 
 
-def sections_from_items(findings: list[JsonValue], candidates: list[JsonValue]) -> ReportSections:
+def sections_from_items(findings: list[JsonValue], candidates: list[JsonValue], project: JsonMap, scope: JsonMap) -> ReportSections:
     mapped_findings = map_items(findings)
     mapped_candidates = map_items(candidates)
     return ReportSections(
         confirmed=[item for item in mapped_findings if is_confirmed(item)],
         resolved=[item for item in mapped_findings if not is_confirmed(item) and not is_candidate(item)],
         candidates=[item for item in mapped_findings if is_candidate(item)] + mapped_candidates,
+        project=project,
+        scope=scope,
     )
 
 
@@ -62,15 +66,21 @@ def map_items(items: list[JsonValue]) -> list[JsonMap]:
 def report_sections_from_json(value: JsonValue) -> ReportSections:
     match value:
         case list() as items:
-            return sections_from_items(items, [])
+            return sections_from_items(items, [], {}, {})
         case {"findings": list() as findings, "candidates": list() as candidates}:
-            return sections_from_items(findings, candidates)
+            return sections_from_items(findings, candidates, as_map(value.get("project")) or {}, as_map(value.get("scope")) or {})
         case {"findings": list() as findings}:
-            return sections_from_items(findings, [])
+            return sections_from_items(findings, [], as_map(value.get("project")) or {}, as_map(value.get("scope")) or {})
         case {"candidates": list() as items}:
-            return ReportSections(confirmed=[], resolved=[], candidates=map_items(items))
+            return ReportSections(
+                confirmed=[],
+                resolved=[],
+                candidates=map_items(items),
+                project=as_map(value.get("project")) or {},
+                scope=as_map(value.get("scope")) or {},
+            )
         case _:
-            return ReportSections(confirmed=[], resolved=[], candidates=[])
+            return ReportSections(confirmed=[], resolved=[], candidates=[], project={}, scope={})
 
 
 def lines_field(item: JsonMap) -> str:
@@ -119,19 +129,6 @@ def category_summary(sections: ReportSections) -> str:
 def reviewed_files_summary(sections: ReportSections) -> str:
     files = sorted({lines_field(item).split(":", 1)[0] for item in [*sections.confirmed, *sections.resolved, *sections.candidates]})
     return ", ".join(files) if files else "None supplied"
-
-
-def render_scope(lines: list[str], sections: ReportSections) -> None:
-    lines.extend([
-        "## Scope",
-        "",
-        "- Mode: report",
-        f"- Date: {date.today().isoformat()}",
-        f"- Files reviewed: {reviewed_files_summary(sections)}",
-        "- Files skipped: Not supplied to report renderer",
-        "- References used: VibeSecurity finding schema, reporting rules, category standards mapping",
-        "",
-    ])
 
 
 def render_executive_summary(lines: list[str], sections: ReportSections) -> None:
@@ -193,25 +190,9 @@ def render_items(lines: list[str], group: RenderGroup) -> int:
     return index
 
 
-def render_coverage_notes(lines: list[str], sections: ReportSections) -> None:
-    lines.extend([
-        "## Coverage Notes",
-        "",
-        f"- Report input included {len(sections.confirmed)} confirmed findings and {len(sections.candidates)} candidates.",
-        "- The report renderer does not rescan the repository; coverage and skipped-file details come from scan/diff payloads.",
-        "- Needs-review candidates are intentionally separated from confirmed findings to avoid overclaiming.",
-        "",
-        "## Follow-Up Recommendations",
-        "",
-        "- Validate each candidate with code-path reachability, boundary crossing, impact, and a regression test before confirming.",
-        "- Re-run `vibesecurity.py scan` after fixes and render a fresh report from the updated JSON.",
-        "",
-    ])
-
-
 def render_report(sections: ReportSections) -> str:
     lines = ["# VibeSecurity Security Report", ""]
-    render_scope(lines, sections)
+    render_scope(lines, sections.scope, sections.project, reviewed_files_summary(sections))
     render_executive_summary(lines, sections)
     if not sections.confirmed and not sections.resolved and not sections.candidates:
         lines.extend(["No findings or candidates were supplied.", ""])
@@ -219,7 +200,7 @@ def render_report(sections: ReportSections) -> str:
     next_index = render_items(lines, RenderGroup("## Confirmed Findings", sections.confirmed, 1))
     next_index = render_items(lines, RenderGroup("## Resolved or Closed Findings", sections.resolved, next_index))
     render_items(lines, RenderGroup("## Candidate Findings Requiring Review", sections.candidates, next_index))
-    render_coverage_notes(lines, sections)
+    render_coverage_notes(lines, sections.scope, len(sections.confirmed), len(sections.candidates))
     return "\n".join(lines)
 
 

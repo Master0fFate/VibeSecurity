@@ -14,6 +14,11 @@ PACKAGE_FRAMEWORKS: Final = {
     "@hono/hono": "hono",
     "hono": "hono",
     "@nestjs/core": "nestjs",
+    "@remix-run/node": "remix",
+    "astro": "astro",
+    "svelte": "sveltekit",
+    "vue": "vue",
+    "nuxt": "nuxt",
 }
 PYTHON_FRAMEWORK_MARKERS: Final = {
     "fastapi": "fastapi",
@@ -27,6 +32,8 @@ def language_for(path: Path) -> str:
     mapping = {
         ".ts": "typescript", ".tsx": "typescript", ".js": "javascript", ".jsx": "javascript", ".py": "python",
         ".go": "go", ".rb": "ruby", ".rs": "rust", ".java": "java", ".cs": "csharp", ".php": "php",
+        ".kt": "kotlin", ".kts": "kotlin", ".swift": "swift", ".scala": "scala", ".ex": "elixir",
+        ".exs": "elixir", ".clj": "clojure", ".cljs": "clojure", ".sql": "sql",
     }
     return mapping.get(suffix, "")
 
@@ -50,6 +57,10 @@ def python_manifest_text(path: Path) -> str:
     if path.name in {"requirements.txt", "pyproject.toml"}:
         return read_text(path).lower()
     return ""
+
+
+def manifest_text(files: list[Path], names: set[str]) -> str:
+    return "\n".join(read_text(path).lower() for path in files if path.name in names)
 
 
 def import_mentions_framework(path: Path, framework: str) -> bool:
@@ -76,15 +87,80 @@ def detect_frameworks(files: list[Path]) -> set[str]:
         frameworks.add("go-http")
     if any(path.name == "Cargo.toml" and "axum" in read_text(path).lower() for path in files):
         frameworks.add("axum")
+    java_text = manifest_text(files, {"pom.xml", "build.gradle", "build.gradle.kts"})
+    if "spring-boot" in java_text or "org.springframework" in java_text:
+        frameworks.add("spring")
+    dotnet_text = manifest_text(files, {path.name for path in files if path.suffix == ".csproj"})
+    if "microsoft.aspnetcore" in dotnet_text:
+        frameworks.add("aspnetcore")
+    composer_text = manifest_text(files, {"composer.json"})
+    if "laravel/framework" in composer_text:
+        frameworks.add("laravel")
+    if "symfony/" in composer_text:
+        frameworks.add("symfony")
+    ruby_text = manifest_text(files, {"Gemfile"})
+    if "rails" in ruby_text:
+        frameworks.add("rails")
+    go_text = manifest_text(files, {"go.mod"})
+    for marker, framework in (("gin-gonic/gin", "gin"), ("go-chi/chi", "chi"), ("labstack/echo", "echo"), ("gofiber/fiber", "fiber")):
+        if marker in go_text:
+            frameworks.add(framework)
+    rust_text = manifest_text(files, {"Cargo.toml"})
+    for marker, framework in (("actix-web", "actix-web"), ("rocket", "rocket")):
+        if marker in rust_text:
+            frameworks.add(framework)
     return frameworks
+
+
+def detect_workflows(rels: list[str]) -> list[str]:
+    workflows: set[str] = set()
+    for rel in rels:
+        lower = rel.lower()
+        if ".github/workflows/" in lower:
+            workflows.add("github-actions")
+        if lower.endswith(".gitlab-ci.yml"):
+            workflows.add("gitlab-ci")
+        if ".circleci/" in lower:
+            workflows.add("circleci")
+        if lower.endswith("jenkinsfile"):
+            workflows.add("jenkins")
+        if "dockerfile" in lower or "docker-compose" in lower:
+            workflows.add("docker")
+        if lower.endswith(".tf") or lower.endswith(".tfvars"):
+            workflows.add("terraform")
+        if lower.endswith((".yaml", ".yml")) and any(marker in lower for marker in ("k8s", "kubernetes", "helm", "charts")):
+            workflows.add("kubernetes")
+    return sorted(workflows)
+
+
+def detect_package_managers(files: list[Path]) -> list[str]:
+    names = {path.name for path in files}
+    managers = {
+        "npm": "package-lock.json",
+        "pnpm": "pnpm-lock.yaml",
+        "yarn": "yarn.lock",
+        "uv": "uv.lock",
+        "pip": "requirements.txt",
+        "cargo": "Cargo.lock",
+        "go-modules": "go.sum",
+        "bundler": "Gemfile",
+        "composer": "composer.lock",
+        "maven": "pom.xml",
+        "gradle": "build.gradle",
+    }
+    return sorted(manager for manager, marker in managers.items() if marker in names)
 
 
 def route_like(rel: str) -> bool:
     lower = rel.lower()
-    route_names = ("route.ts", "route.tsx", "route.js", "route.jsx", "+server.ts", "+server.js")
+    route_names = (
+        "route.ts", "route.tsx", "route.js", "route.jsx", "+server.ts", "+server.js",
+        "controller.java", "controller.cs", "controller.ts", "controller.js",
+    )
     return (
         "/api/" in lower
         or "routes" in lower
+        or "controllers" in lower
         or lower.endswith(("urls.py", "views.py", *route_names))
     )
 
@@ -95,11 +171,12 @@ def detect_inventory(root: Path) -> JsonMap:
     text_all = "\n".join(read_text(path).lower() for path in files)
     languages = sorted({language for path in files if (language := language_for(path))})
     ai_sdks = sorted(marker for marker in ("openai", "anthropic", "langchain", "pydantic-ai", "vercel-ai") if marker in text_all)
-    ci = ["github-actions"] if any(".github/workflows/" in item for item in rels) else []
     return {
         "languages": languages,
         "frameworks": sorted(detect_frameworks(files)),
         "ai_sdks": ai_sdks,
-        "ci": ci,
+        "ci": ["github-actions"] if any(".github/workflows/" in item for item in rels) else [],
+        "workflows": detect_workflows(rels),
+        "package_managers": detect_package_managers(files),
         "route_files": sorted(item for item in rels if route_like(item))[:50],
     }

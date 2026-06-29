@@ -10,7 +10,7 @@ Use `git diff --name-only`, staged changes, and untracked files. Classify change
 
 ## `$vibesecurity scan`
 
-Run `python .agents/skills/vibesecurity/scripts/vibesecurity.py scan` when local execution is appropriate. Treat output as candidates. Manually validate reachable data flow, security boundary crossing, and impact before reporting a finding.
+Run `python .agents/skills/vibesecurity/scripts/vibesecurity.py scan` when local execution is appropriate. Treat output as candidates. Read `project`, `scope.coverage`, `rule_packs`, `files_skipped`, `truncated`, and `unsupported_or_profile_only` before judging coverage. Manually validate reachable data flow, security boundary crossing, and impact before reporting a finding.
 
 ## `$vibesecurity deep <scope>`
 

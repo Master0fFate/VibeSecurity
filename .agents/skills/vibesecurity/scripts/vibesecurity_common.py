@@ -12,8 +12,16 @@ JsonMap: TypeAlias = dict[str, JsonValue]
 TEXT_SUFFIXES: Final = {
     ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".py", ".go", ".rb", ".php", ".java",
     ".cs", ".rs", ".yml", ".yaml", ".json", ".toml", ".env", ".md", ".txt", ".dockerfile", ".sh",
+    ".kt", ".kts", ".swift", ".scala", ".ex", ".exs", ".clj", ".cljs", ".sql", ".xml",
+    ".gradle", ".tf", ".tfvars", ".hcl", ".lock", ".sln", ".csproj", ".props", ".targets",
+    ".vue", ".svelte", ".astro", ".html", ".conf", ".ini", ".properties",
 }
-TEXT_NAMES: Final = {"Dockerfile", "package.json", "requirements.txt", "go.mod", "Cargo.toml", "pyproject.toml"}
+TEXT_NAMES: Final = {
+    "Dockerfile", "docker-compose.yml", "docker-compose.yaml", "Jenkinsfile", "Makefile",
+    "Gemfile", "Rakefile", "Procfile", "package.json", "requirements.txt", "go.mod",
+    "go.sum", "Cargo.toml", "Cargo.lock", "pyproject.toml", "Pipfile", "composer.json",
+    "pom.xml", "build.gradle", "settings.gradle", "mix.exs",
+}
 SKIP_PARTS: Final = {
     ".git", ".codegraph", ".omo", ".venv", ".vibesec", ".vibesecurity",
     "__pycache__", "build", "dist", "node_modules", "venv",
