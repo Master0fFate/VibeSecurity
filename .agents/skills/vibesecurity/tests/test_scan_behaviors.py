@@ -33,6 +33,19 @@ def test_nearby_terms_use_line_window() -> None:
     assert "far/route.ts" not in paths
 
 
+def test_payloads_accept_alias_equivalent_roots() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "alias").mkdir()
+        aliased_root = root / "alias" / ".."
+        write(
+            root / "route.ts",
+            "export async function GET() { return Response.json([]); }\n",
+        )
+        assert scan_payload(aliased_root)["scope"]["files_considered_count"] == 1
+        assert inventory_payload(aliased_root)["scope"]["files_considered_count"] == 1
+
+
 def test_scan_reports_skips_and_truncation() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -179,6 +192,7 @@ def test_glob_matches_middle_double_star_without_directory() -> None:
 TESTS: list[TestFunc] = [
     test_fixture_scan_emits_review_candidates,
     test_nearby_terms_use_line_window,
+    test_payloads_accept_alias_equivalent_roots,
     test_scan_reports_skips_and_truncation,
     test_env_snippets_redact_values,
     test_inventory_prefers_manifest_and_route_patterns,

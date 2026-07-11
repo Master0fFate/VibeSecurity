@@ -114,6 +114,7 @@ def scan_candidates(
     selection: FileSelection | None = None,
     catalog: MatcherCatalog | None = None,
 ) -> ScanResult:
+    root = root.resolve()
     candidates: list[JsonMap] = []
     total_candidates = 0
     selected = selection or select_repo_files(root)
@@ -197,6 +198,7 @@ def coverage_for(
 
 
 def inventory_payload(root: Path) -> JsonMap:
+    root = root.resolve()
     selection = select_repo_files(root)
     project = detect_inventory(root, list(selection.files))
     catalog = load_matcher_catalog(root)
@@ -225,6 +227,7 @@ def inventory_payload(root: Path) -> JsonMap:
 
 
 def diff_payload(root: Path) -> JsonMap:
+    root = root.resolve()
     selection = select_repo_files(root)
     result = changed_files(root)
     project = detect_inventory(root, list(selection.files))
@@ -258,6 +261,7 @@ def diff_payload(root: Path) -> JsonMap:
 
 
 def scan_payload(root: Path) -> JsonMap:
+    root = root.resolve()
     selection = select_repo_files(root)
     project = detect_inventory(root, list(selection.files))
     catalog = load_matcher_catalog(root)
