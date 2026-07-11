@@ -22,6 +22,7 @@ dist/
 
 # Generated VibeSecurity and local-tool state
 .vibesecurity/
+/skills-lock.json
 .vibesec/
 .omo/
 .codegraph/

@@ -1,8 +1,8 @@
 ---
 name: vibesecurity
-description: Defensive, evidence-first security review for code the user owns or is authorized to assess. Use for explicit $vibesecurity commands and reviews of diffs, applications, APIs, AI agents, dependencies, secrets, CI/CD, infrastructure, auth, injection, SSRF, privacy, cryptography, and abuse paths. Do not use for ordinary refactors or unauthorized/offensive testing.
+description: Defensive, evidence-first security review for code the user owns or is authorized to assess. Use for explicit VibeSecurity invocations ($vibesecurity in Codex or /vibesecurity in Claude Code) and reviews of diffs, applications, APIs, AI agents, dependencies, secrets, CI/CD, infrastructure, auth, injection, SSRF, privacy, cryptography, and abuse paths. Do not use for ordinary refactors or unauthorized/offensive testing.
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
 ---
 
 # VibeSecurity
@@ -19,14 +19,16 @@ Find reachable security defects in owned or authorized code, explain them precis
 
 ## Commands
 
-- `$vibesecurity brief [scope]` — build or refresh a concise security profile and threat model.
-- `$vibesecurity diff` — review changed, staged, and untracked files plus the minimum supporting context.
-- `$vibesecurity scan [scope]` — run bounded deterministic discovery, then validate ranked candidates manually.
-- `$vibesecurity deep <path|feature|risk>` — perform a threat-led review of one explicit scope.
-- `$vibesecurity ai [scope]` — review LLM, agent, MCP/A2A, retrieval, memory, identity, tool, and cost boundaries.
-- `$vibesecurity recheck [finding-id|all]` — re-evaluate evidence and regression tests after changes.
-- `$vibesecurity fix <finding-id|all> [--review-only]` — remediate confirmed findings or return a non-writing plan.
-- `$vibesecurity teach <finding-id>` — turn one confirmed local pattern into a constrained candidate matcher with positive and negative examples.
+Invoke the skill as `$vibesecurity <command>` in Codex or `/vibesecurity <command>` in Claude Code.
+
+- `brief [scope]` — build or refresh a concise security profile and threat model.
+- `diff` — review changed, staged, and untracked files plus the minimum supporting context.
+- `scan [scope]` — run bounded deterministic discovery, then validate ranked candidates manually.
+- `deep <path|feature|risk>` — perform a threat-led review of one explicit scope.
+- `ai [scope]` — review LLM, agent, MCP/A2A, retrieval, memory, identity, tool, and cost boundaries.
+- `recheck [finding-id|all]` — re-evaluate evidence and regression tests after changes.
+- `fix <finding-id|all> [--review-only]` — remediate confirmed findings or return a non-writing plan.
+- `teach <finding-id>` — turn one confirmed local pattern into a constrained candidate matcher with positive and negative examples.
 
 ## Review Workflow
 

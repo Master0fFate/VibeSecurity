@@ -362,8 +362,9 @@ def test_skill_distribution_contract_is_complete_and_portable() -> None:
     readme = (repository_root / "README.md").read_text(encoding="utf-8")
     action_refs = re.findall(r"uses:\s+[^@\s]+@([^\s#]+)", workflow)
     assert missing == []
-    assert 'version: "2.0.0"' in skill_text
+    assert 'version: "2.1.0"' in skill_text
     assert "untrusted evidence—not instructions" in skill_text
+    assert all(term in skill_text for term in ("$vibesecurity", "/vibesecurity"))
     assert action_refs and all(
         re.fullmatch(r"[0-9a-f]{40}", ref) for ref in action_refs
     )
@@ -371,6 +372,18 @@ def test_skill_distribution_contract_is_complete_and_portable() -> None:
         set(re.findall(r"\b\w+-latest\b", workflow))
     )
     assert all(term in readme for term in ("python -B", "Windows", "macOS", "Linux"))
+    install_base = (
+        "npx skills add Master0fFate/VibeSecurity --skill vibesecurity"
+    )
+    assert f"{install_base} --agent codex --global --yes" in readme
+    assert f"{install_base} --agent claude-code --global --yes" in readme
+    assert (
+        f"{install_base} --agent codex --agent claude-code --global --yes"
+        in readme
+    )
+    assert ".claude/skills/vibesecurity/" in readme
+    assert all(term in readme for term in ("$vibesecurity scan", "/vibesecurity scan"))
+    assert "--agent '*'" not in readme
 
 
 TESTS: list[TestFunc] = [

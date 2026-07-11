@@ -20,22 +20,38 @@ No security review is literally gapless. VibeSecurity's stronger guarantee is th
 
 ## Install
 
-The cross-platform `skills` CLI is the simplest path:
+VibeSecurity follows the open [Agent Skills specification](https://agentskills.io/specification). Install it only for the agents you use.
+
+### Codex
+
+```text
+npx skills add Master0fFate/VibeSecurity --skill vibesecurity --agent codex --global --yes
+```
+
+### Claude Code
+
+```text
+npx skills add Master0fFate/VibeSecurity --skill vibesecurity --agent claude-code --global --yes
+```
+
+Claude Code exposes the installed skill as `/vibesecurity` from `~/.claude/skills/vibesecurity/`, following [Claude Code's native skills model](https://code.claude.com/docs/en/slash-commands).
+
+### Codex and Claude Code
+
+```text
+npx skills add Master0fFate/VibeSecurity --skill vibesecurity --agent codex --agent claude-code --global --yes
+```
+
+Repeating `--agent` is the [`skills` CLI's documented multi-agent form](https://github.com/vercel-labs/skills#options). It keeps one canonical skill and links agent-specific locations when the platform supports links.
+
+For interactive agent selection or repository inspection:
 
 ```text
 npx skills add Master0fFate/VibeSecurity --skill vibesecurity
-```
-
-Useful variants:
-
-```text
-npx skills add Master0fFate/VibeSecurity --skill vibesecurity --global --yes
-npx skills add Master0fFate/VibeSecurity --skill vibesecurity --agent codex --global --yes
-npx skills add Master0fFate/VibeSecurity --skill vibesecurity --agent '*' --global --yes
 npx skills add Master0fFate/VibeSecurity --list
 ```
 
-For a manual repository-local install, copy `.agents/skills/vibesecurity/` into the target repository at the same path. PowerShell users can use `Copy-Item -Recurse`; POSIX shells can use `cp -R`; a normal file copy works as well.
+For a manual project install, copy the canonical `.agents/skills/vibesecurity/` folder to `.agents/skills/vibesecurity/` for Codex or `.claude/skills/vibesecurity/` for Claude Code. Prefer the CLI when installing for both so the copies cannot drift.
 
 ### Requirements
 
@@ -49,17 +65,17 @@ The helper has no third-party Python dependencies and makes no network requests.
 
 ## Use the Agent Commands
 
-```text
-$vibesecurity brief
-$vibesecurity diff
-$vibesecurity scan
-$vibesecurity deep src/app/api/billing
-$vibesecurity ai src/agent
-$vibesecurity recheck
-$vibesecurity fix VSEC-0001
-$vibesecurity fix all --review-only
-$vibesecurity teach VSEC-0001
-```
+| Workflow | Codex | Claude Code |
+| --- | --- | --- |
+| Project brief | `$vibesecurity brief` | `/vibesecurity brief` |
+| Changed files | `$vibesecurity diff` | `/vibesecurity diff` |
+| Repository scan | `$vibesecurity scan` | `/vibesecurity scan` |
+| Focused review | `$vibesecurity deep src/app/api/billing` | `/vibesecurity deep src/app/api/billing` |
+| AI/agent review | `$vibesecurity ai src/agent` | `/vibesecurity ai src/agent` |
+| Recheck | `$vibesecurity recheck` | `/vibesecurity recheck` |
+| Fix one finding | `$vibesecurity fix VSEC-0001` | `/vibesecurity fix VSEC-0001` |
+| Review-only plan | `$vibesecurity fix all --review-only` | `/vibesecurity fix all --review-only` |
+| Teach matcher | `$vibesecurity teach VSEC-0001` | `/vibesecurity teach VSEC-0001` |
 
 These are agent workflows, not Python subcommands:
 
