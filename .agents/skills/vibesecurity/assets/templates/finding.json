@@ -5,7 +5,7 @@
   "confidence": "high|medium|low",
   "status": "confirmed|needs-review|fixed|wont-fix|false-positive",
   "category": "authz|authn|injection|ssrf|xss|secrets|supply-chain|ci-cd|ai-agentic|privacy|crypto|availability|other",
-  "standard_refs": ["OWASP-ASVS", "OWASP-LLM01"],
+  "standard_refs": ["OWASP-ASVS-v5.0.0", "OWASP-LLM01:2025"],
   "affected_files": [
     {
       "path": "src/example.ts",

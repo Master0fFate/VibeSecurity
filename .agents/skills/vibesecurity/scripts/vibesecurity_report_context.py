@@ -1,8 +1,18 @@
 from __future__ import annotations
 
 from datetime import date
+from html import escape
 
-from vibesecurity_common import JsonMap, JsonValue, redact
+from vibesecurity_common import JsonMap, JsonValue, visible_text
+
+
+def inline_text(value: str) -> str:
+    single_line = visible_text(value, 2_000).replace("\n", "\\n").replace("\t", "\\t")
+    escaped = escape(single_line, quote=False)
+    return "".join(
+        f"\\{character}" if character in "\\`*_[]#>" else character
+        for character in escaped
+    )
 
 
 def as_list(value: JsonValue) -> list[JsonValue]:
@@ -30,7 +40,9 @@ def files_reviewed_summary(scope: JsonMap, fallback: str) -> str:
 
 def skipped_summary(scope: JsonMap) -> str:
     skipped = as_list(scope.get("files_skipped"))
-    if not skipped:
+    supplied_count = scope.get("files_skipped_count")
+    count = supplied_count if isinstance(supplied_count, int) else len(skipped)
+    if count == 0:
         return "None supplied"
     samples: list[str] = []
     for item in skipped[:5]:
@@ -40,7 +52,8 @@ def skipped_summary(scope: JsonMap) -> str:
             if isinstance(path, str) and isinstance(reason, str):
                 samples.append(f"{path} ({reason})")
     suffix = f"; sample: {', '.join(samples)}" if samples else ""
-    return f"{len(skipped)} skipped{suffix}"
+    sample_note = " (sampled)" if count > len(skipped) else ""
+    return f"{count} skipped{sample_note}{suffix}"
 
 
 def project_summary(project: JsonMap) -> str:
@@ -87,35 +100,85 @@ def adapter_summary(scope: JsonMap) -> str:
     return ", ".join(rendered) if rendered else "None supplied"
 
 
-def render_scope(lines: list[str], scope: JsonMap, project: JsonMap, fallback_files: str) -> None:
+def selection_summary(scope: JsonMap) -> str:
+    truncated = scope.get("selection_truncated")
+    if truncated is False:
+        return "Complete within configured budgets"
+    if truncated is True:
+        reason = scope.get("selection_limit_reason")
+        return (
+            f"Truncated ({reason})"
+            if isinstance(reason, str) and reason
+            else "Truncated"
+        )
+    return "Not supplied"
+
+
+def matcher_warning_summary(scope: JsonMap) -> str:
+    if "matcher_warnings" not in scope:
+        return "Not supplied"
+    warnings = text_values(scope.get("matcher_warnings"))
+    if not warnings:
+        return "None"
+    return f"{len(warnings)} warning(s); first: {warnings[0]}"
+
+
+def supplied_list_summary(scope: JsonMap, key: str) -> str:
+    if key not in scope:
+        return "Not supplied"
+    values = text_values(scope.get(key))
+    return ", ".join(values) if values else "None"
+
+
+def residual_risk_summary(scope: JsonMap) -> str:
+    value = scope.get("residual_risk")
+    return value if isinstance(value, str) and value else "Not supplied"
+
+
+def render_scope(
+    lines: list[str], scope: JsonMap, project: JsonMap, fallback_files: str
+) -> None:
     mode = scope.get("mode")
     mode_text = mode if isinstance(mode, str) else "report"
-    lines.extend([
-        "## Scope",
-        "",
-        f"- Mode: {redact(mode_text)}",
-        f"- Date: {date.today().isoformat()}",
-        f"- Project profile: {redact(project_summary(project))}",
-        f"- Files reviewed: {redact(files_reviewed_summary(scope, fallback_files))}",
-        f"- Files skipped: {redact(skipped_summary(scope))}",
-        f"- Rule packs loaded: {redact(rule_pack_summary(scope))}",
-        f"- Unsupported/profile-only surfaces: {redact(unsupported_summary(scope))}",
-        "",
-    ])
+    lines.extend(
+        [
+            "## Scope",
+            "",
+            f"- Mode: {inline_text(mode_text)}",
+            f"- Date: {date.today().isoformat()}",
+            f"- Project profile: {inline_text(project_summary(project))}",
+            f"- Files reviewed: {inline_text(files_reviewed_summary(scope, fallback_files))}",
+            f"- Files skipped: {inline_text(skipped_summary(scope))}",
+            f"- Selection budget: {inline_text(selection_summary(scope))}",
+            f"- Rule packs loaded: {inline_text(rule_pack_summary(scope))}",
+            f"- Matcher diagnostics: {inline_text(matcher_warning_summary(scope))}",
+            f"- Unsupported/profile-only surfaces: {inline_text(unsupported_summary(scope))}",
+            "",
+        ]
+    )
 
 
-def render_coverage_notes(lines: list[str], scope: JsonMap, confirmed_count: int, candidate_count: int) -> None:
-    lines.extend([
-        "## Coverage Notes",
-        "",
-        f"- Report input included {confirmed_count} confirmed findings and {candidate_count} candidates.",
-        "- Candidate detectors are not vulnerability proof; the agent must validate reachability, boundary crossing, impact, and verification.",
-        f"- Optional local analyzers: {redact(adapter_summary(scope))}",
-        f"- Unsupported/profile-only surfaces require manual review: {redact(unsupported_summary(scope))}",
-        "",
-        "## Follow-Up Recommendations",
-        "",
-        "- Validate each candidate with code-path reachability, boundary crossing, impact, and a regression test before confirming.",
-        "- Re-run `vibesecurity.py scan` after fixes and render a fresh report from the updated JSON.",
-        "",
-    ])
+def render_coverage_notes(
+    lines: list[str], scope: JsonMap, confirmed_count: int, candidate_count: int
+) -> None:
+    lines.extend(
+        [
+            "## Coverage Notes",
+            "",
+            f"- Report input included {confirmed_count} confirmed findings and {candidate_count} candidates.",
+            "- Candidate detectors are not vulnerability proof; the agent must validate reachability, boundary crossing, impact, and verification.",
+            f"- Optional local analyzers: {inline_text(adapter_summary(scope))}",
+            f"- Analyzers actually run: {inline_text(supplied_list_summary(scope, 'analyzers_run'))}",
+            f"- Manual review checks: {inline_text(supplied_list_summary(scope, 'manual_checks'))}",
+            f"- Repository selection: {inline_text(selection_summary(scope))}",
+            f"- Matcher diagnostics: {inline_text(matcher_warning_summary(scope))}",
+            f"- Unsupported/profile-only surfaces require manual review: {inline_text(unsupported_summary(scope))}",
+            f"- Residual risk: {inline_text(residual_risk_summary(scope))}",
+            "",
+            "## Follow-Up Recommendations",
+            "",
+            "- Validate each candidate with code-path reachability, boundary crossing, impact, and a regression test before confirming.",
+            "- Re-run `vibesecurity.py scan` after fixes and render a fresh report from the updated JSON.",
+            "",
+        ]
+    )

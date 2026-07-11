@@ -1,84 +1,53 @@
 # VibeSecurity
 
-> A defensive security review skill pack for arbitrary repositories and worktrees.
+> High-assurance, low-bloat security review for coding agents.
 
-VibeSecurity gives your coding agent a focused security-review brain without turning your project into a scanner platform or plugin runtime. Drop the skill into `.agents/skills/`, invoke `$vibesecurity`, and review diffs, routes, AI agents, dependencies, secrets, infrastructure, and CI/CD workflows with evidence-first discipline.
+VibeSecurity is a defensive skill pack for reviewing repositories you own or are authorized to assess. It combines a compact threat-model workflow with a dependency-free Python candidate engine, focused references, guarded remediation, and explicit coverage accounting.
 
-## Why Use It?
+It is intentionally not a scanner platform, SaaS service, plugin runtime, or giant rule dump. Deterministic discovery narrows attention; the agent must still prove reachability, a crossed security boundary, realistic impact, and a verification path before reporting a vulnerability.
 
-AI-assisted code moves fast. That is useful right up until a generated route skips authorization, an agent pipes model output into a shell, or a GitHub Actions workflow runs forked code with trusted permissions. VibeSecurity exists for that messy middle: the moment before you merge, when you want a cheap, local, security-focused second pass.
+## What Makes It Different
 
-Use it when you want:
+- **Threat-led, not matcher-led:** every review covers assets, actors, entry points, trust boundaries, sensitive flows, high-impact operations, and 13 compact review lanes.
+- **Evidence before severity:** candidates and confirmed findings remain separate through scan, report, and remediation.
+- **Hostile-input aware:** repository text and project-local matcher prose are treated as untrusted data, never instructions. Output redacts secrets and neutralizes terminal controls, invisible direction changes, HTML, and Markdown structure.
+- **Coverage truth:** selection budgets, skipped counts and samples, candidate truncation, matcher diagnostics, rule packs, optional-tool availability, and profile-only surfaces are preserved in output.
+- **Bounded by design:** files, bytes, matcher files, matcher counts, JSON inputs, emitted text, and retained candidates have explicit limits.
+- **Local and portable:** the helper uses Python's standard library only and is tested on Windows, macOS, and Linux.
+- **Current baselines:** OWASP ASVS 5.0.0, OWASP LLM Top 10 2025, OWASP Agentic Top 10 2026, NIST SSDF/SP 800-218A, CISA Secure by Design, and SLSA.
 
-- **Defensive review without ceremony**: no npm package, SaaS account, gateway key, worker service, or cloud sandbox.
-- **Lower token burn**: deterministic candidate discovery first, then targeted agent review only where risk appears.
-- **AI-agent security coverage**: prompt injection, excessive agency, unsafe tool calls, retrieval authorization, secrets in prompts, and cost abuse.
-- **Generic repository coverage**: language/workflow profiling, web/API auth, object-level authorization, SSRF, injection, XSS, file paths, secrets, supply chain, AI-agentic, infrastructure, and CI/CD risks.
-- **Evidence-backed findings**: matchers create review candidates; the agent must confirm reachability, boundary crossing, impact, and remediation before calling something a vulnerability.
+No security review is literally gapless. VibeSecurity's stronger guarantee is that important lanes are considered and unreviewed or unsupported surfaces remain visible instead of being mistaken for safety.
 
-## Install With `skills`
+## Install
 
-The easiest install path is the open `skills` CLI:
+The cross-platform `skills` CLI is the simplest path:
 
-```bash
+```text
 npx skills add Master0fFate/VibeSecurity --skill vibesecurity
 ```
 
 Useful variants:
 
-```bash
-# Install globally for detected compatible agents
+```text
 npx skills add Master0fFate/VibeSecurity --skill vibesecurity --global --yes
-
-# Install to a specific agent
 npx skills add Master0fFate/VibeSecurity --skill vibesecurity --agent codex --global --yes
-
-# Install to every supported agent target without prompts
 npx skills add Master0fFate/VibeSecurity --skill vibesecurity --agent '*' --global --yes
-
-# Inspect what the package exposes before installing
 npx skills add Master0fFate/VibeSecurity --list
 ```
 
-`skills` discovers VibeSecurity from `.agents/skills/vibesecurity/SKILL.md`, so the GitHub repository itself is the installable skill package. No npm package, SaaS account, API key, or build step is required.
+For a manual repository-local install, copy `.agents/skills/vibesecurity/` into the target repository at the same path. PowerShell users can use `Copy-Item -Recurse`; POSIX shells can use `cp -R`; a normal file copy works as well.
 
-## Requirements
-
-Hard requirements:
+### Requirements
 
 - Code you own or are authorized to review.
-- A coding agent that supports local skills installed from `.agents/skills/`.
-- Node.js with `npx` for the `skills` CLI install path, or a manual copy of the skill folder.
-- Python 3.11+ to run the optional local helper commands.
-- Git for `$vibesecurity diff` risk classification.
+- A coding agent that supports local skills.
+- Node.js/`npx` only when using the `skills` installer.
+- Python 3.11+ only for the optional helper.
+- Git only for changed-file inventory.
 
-Optional coverage enhancers:
+The helper has no third-party Python dependencies and makes no network requests.
 
-- `sg` / ast-grep for AST-aware local checks.
-- Semgrep for external rule packs.
-- Gitleaks for dedicated secret scanning.
-- `npm audit`, pip-audit, and cargo-audit for ecosystem dependency checks.
-
-Missing optional tools do not break installation or scanning. VibeSecurity reports unavailable analyzers as coverage caveats and falls back to bundled rule packs plus manual agent validation.
-
-## Manual Install
-
-Copy the skill folder into any repository:
-
-```bash
-mkdir -p .agents/skills
-cp -R path/to/VibeSecurity/.agents/skills/vibesecurity .agents/skills/
-```
-
-Then invoke it from your agent:
-
-```text
-$vibesecurity diff
-```
-
-## Agent Commands
-
-These commands are handled by your coding agent after it loads the `vibesecurity` skill. They are not Python CLI subcommands.
+## Use the Agent Commands
 
 ```text
 $vibesecurity brief
@@ -89,98 +58,125 @@ $vibesecurity ai src/agent
 $vibesecurity recheck
 $vibesecurity fix VSEC-0001
 $vibesecurity fix all --review-only
-$vibesecurity teach
+$vibesecurity teach VSEC-0001
 ```
 
-Agent-to-helper mapping:
+These are agent workflows, not Python subcommands:
 
-- `$vibesecurity diff` may call `python .agents/skills/vibesecurity/scripts/vibesecurity.py diff`.
-- `$vibesecurity scan` may call `python .agents/skills/vibesecurity/scripts/vibesecurity.py scan`.
-- `$vibesecurity recheck` may call `scan` and `report`, then manually validate status.
-- `$vibesecurity fix` may call `python .agents/skills/vibesecurity/scripts/vibesecurity.py fix-plan` before the agent applies patches to confirmed findings.
-- `$vibesecurity brief`, `deep`, `ai`, and `teach` are agent workflows guided by the references.
+- `brief` builds a concise project profile and threat model.
+- `diff` reviews unstaged, staged, and untracked changes with minimal support context.
+- `scan` runs deterministic discovery and manually validates ranked candidates.
+- `deep` applies the review lanes to one path, feature, or risk class.
+- `ai` covers LLM, retrieval, memory, agent identity, MCP/A2A, tools, human approval, and resource boundaries.
+- `recheck` verifies evidence and regression behavior after changes.
+- `fix` patches confirmed findings only; `--review-only` prevents writes.
+- `teach` creates a constrained project-local matcher from a confirmed true positive.
 
-`fix` is the remediation lane: it patches confirmed findings when you ask for a fix, patch, remediation, or auto-fix. It does not patch raw scan candidates. Use `--review-only` when you want the remediation plan without file edits.
+When installed globally, the agent resolves scripts and references beside the loaded `SKILL.md`. It does not assume the target repository contains the skill.
 
 ## Optional Local Helper
 
-The helper is read-only by default, has no third-party dependencies, and uses only the Python standard library.
-
-Supported local helper commands are:
+From a cloned or repository-local installation:
 
 ```text
-inventory
-diff
-scan
-report
-fix-plan
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py inventory --root .
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py diff --root .
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py scan --root .
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py report --root . --input .vibesecurity/findings.json
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py fix-plan --root . --input .vibesecurity/findings.json --finding all
 ```
 
-```bash
-python .agents/skills/vibesecurity/scripts/vibesecurity.py inventory
-python .agents/skills/vibesecurity/scripts/vibesecurity.py diff
-python .agents/skills/vibesecurity/scripts/vibesecurity.py scan
-python .agents/skills/vibesecurity/scripts/vibesecurity.py report --input .vibesecurity/findings.json
-python .agents/skills/vibesecurity/scripts/vibesecurity.py fix-plan --input .vibesecurity/findings.json --finding all
-python .agents/skills/vibesecurity/scripts/vibesecurity.py fix-plan --input .vibesecurity/findings.json --finding VSEC-0001 --review-only
+Use `python3 -B` when that is the platform's launcher. On Windows, `py -3 -B` is also supported. The helper itself contains no shell-specific commands.
+
+Helper commands:
+
+- `inventory` — detect languages, frameworks, AI SDKs, package managers, routes, CI, containers, and infrastructure surfaces.
+- `diff` — return NUL-safe changed-file inventory and risk categories; Git failures become warnings.
+- `scan` — return bounded, prioritized review candidates.
+- `report` — render confirmed, closed, and needs-review items separately while preserving input coverage metadata.
+- `fix-plan` — emit patch-ready guidance only for `status: confirmed`; never edits source.
+
+`--input` and `--output` paths are resolved and confined to `--root`, so behavior does not depend on the caller's current working directory or follow repository symlinks outside the review scope.
+
+## How a Review Works
+
+1. Confirm authorization, scope, mode, and whether edits are allowed.
+2. Map assets, actors, entry points, trust boundaries, sensitive flows, high-impact operations, third parties, and unknowns.
+3. Run cheap inventory, diff, or candidate discovery.
+4. Inspect selection/truncation, skipped surfaces, matcher warnings, rule packs, and support levels before judging results.
+5. Load only the relevant checklist or framework note.
+6. Trace each candidate through callers, guards, policies, schemas, sinks, runtime reachability, and counterevidence.
+7. Report confirmed findings first; keep incomplete signals under `needs-review`.
+8. If authorized, patch the smallest reliable boundary, add a regression test, rerun checks, and re-read the path before marking fixed.
+
+A confirmed finding requires exact evidence, a realistic attack scenario, concrete impact, independent severity and confidence, a viable fix, and a decisive verification step. Matcher hints never satisfy that gate by themselves.
+
+## Coverage Without Rule Bloat
+
+The compact review map covers:
+
+- authentication, sessions, authorization, and tenancy;
+- validation, interpreter/query sinks, browser trust, files, archives, parsers, and egress;
+- secrets, cryptography, transport, privacy, logging, and data lifecycle;
+- business logic, replay, idempotency, races, availability, quotas, and abuse economics;
+- dependencies, build integrity, containers, CI/CD, infrastructure, deployment, and operations;
+- LLM and agentic risks: goal hijack, tool misuse, identity abuse, dynamic supply chain, unexpected code execution, memory poisoning, inter-agent communication, cascading failures, human trust exploitation, rogue agents, disclosure, and denial of wallet.
+
+Bundled substring matchers cover high-signal portions of TypeScript/JavaScript, Python, Go, Ruby, Rust, Java, C#, PHP, PowerShell, batch, major CI systems, Docker, Kubernetes, and Terraform. Other detected languages and workflows are marked profile-only or unsupported and routed to manual review.
+
+The candidate engine also recognizes dangerous TLS/token verification, weak security randomness, sensitive logging, archive extraction, production debug exposure, CI permission boundaries, agent memory, dynamic tool/MCP loading, and delegated identity.
+
+## Project-Local Matchers
+
+`$vibesecurity teach` writes rules under `.vibesecurity/matchers/`. The format is a deliberately restricted YAML subset so the helper stays dependency-free and predictable:
+
+- lowercase unique id;
+- one allowed category, severity, and confidence;
+- case-insensitive substring patterns and optional nearby terms;
+- one-line scalar values only;
+- bounded lists and field lengths;
+- positive and negative examples.
+
+Invalid, oversized, duplicate, or unsupported rules are ignored with explicit `matcher_warnings`. Local matcher text is still untrusted evidence and can only create candidates.
+
+## Optional Analyzers
+
+VibeSecurity discovers local availability of ast-grep, Semgrep, Gitleaks, npm audit, pip-audit, and cargo-audit. It does not silently execute them or count availability as coverage. For critical releases, use authorized language-native SAST, SCA, secret, IaC/container, and dynamic testing alongside human review.
+
+## Develop and Verify
+
+Run the dependency-free suite:
+
+```text
+python -B .agents/skills/vibesecurity/tests/run_tests.py
 ```
 
-`scan` returns candidates, not final findings. The payload includes `project` profiling, `scope.coverage`, `rule_packs`, `matchers_loaded`, `truncated`, `candidate_limit`, `candidates_total`, `candidates_returned`, skipped-file coverage, optional analyzer availability, and candidate priority metadata. Your agent still has to validate code paths before reporting a vulnerability.
+Compile the helper portably:
 
-`fix-plan` returns patch-ready guidance only for `status: confirmed` findings. It blocks `needs-review` candidates so automated remediation cannot silently turn a matcher hit into a source edit.
-
-## Smoke Tests
-
-Run the bundled fixtures:
-
-```bash
-PYTHONDONTWRITEBYTECODE=1 python .agents/skills/vibesecurity/scripts/vibesecurity.py inventory --root .agents/skills/vibesecurity/tests/fixtures
-PYTHONDONTWRITEBYTECODE=1 python .agents/skills/vibesecurity/scripts/vibesecurity.py scan --root .agents/skills/vibesecurity/tests/fixtures
-PYTHONDONTWRITEBYTECODE=1 python .agents/skills/vibesecurity/scripts/vibesecurity.py report --input .agents/skills/vibesecurity/tests/expected/findings.json
-PYTHONDONTWRITEBYTECODE=1 python .agents/skills/vibesecurity/tests/run_tests.py
+```text
+python -m compileall -q .agents/skills/vibesecurity/scripts .agents/skills/vibesecurity/tests
 ```
 
-Expected candidate classes include:
+CI runs the suite on Windows, macOS, and Linux against the minimum supported Python and a current Python release. GitHub Actions are pinned to immutable full commit SHAs with read-only repository permissions.
 
-- `missing-auth-route-candidate`
-- `ai-output-to-shell`
-- `github-actions-pr-target`
-- `unpinned-github-action`
+## Safety and Limits
 
-## What Is Included?
+VibeSecurity is for defensive review of authorized code. It does not perform live exploitation, credential theft, persistence, evasion, malware behavior, unauthorized network scanning, or secret exfiltration. Safe proof means code-path reasoning, local tests, mocks, and harmless fixtures.
 
-- `SKILL.md` with command routing, safety boundaries, and reference-loading rules.
-- Focused references for web/API, AI-agentic, supply-chain, secrets, CI/CD, and coverage-truth review.
-- Framework notes for Next.js, React, Express, Fastify, Hono, NestJS, FastAPI, Django, Flask, Rails, Go HTTP, and adjacent generic surfaces discovered by inventory.
-- Small examples for missing auth, object-level auth, SSRF, LLM-output-to-shell, RAG prompt injection, and privileged PR workflows.
-- Matcher catalogs that find high-signal candidates across TypeScript, JavaScript, Python, Go, Ruby, Rust, Java, C#, PHP, GitHub Actions, GitLab CI, Jenkins, Docker, Kubernetes, and Terraform without claiming scanner certainty.
-- Templates for findings, matchers, project profiles, and reports.
-- Fixtures that prove the helper catches useful signals without full-repo AI review.
+The helper is not a data-flow engine. A clean scan means only that no bundled substring matcher fired inside the reported selection budget. The final report must state manual checks, skipped/truncated surfaces, unsupported areas, tools actually run, and residual risk.
 
-## Skill-Pack Architecture
-
-VibeSecurity remains an installable skill set:
+## Repository Layout
 
 ```text
 .agents/skills/vibesecurity/
   SKILL.md
+  agents/openai.yaml
   references/
-  references/matchers/
+    review-lanes.md
+    matchers/
+    framework-notes/
+    examples/
   scripts/
   assets/templates/
   tests/
 ```
-
-The helper is a progressively enhanced local candidate engine. It uses bundled YAML matcher packs and Python standard-library code by default. If local analyzers such as `sg`, Semgrep, Gitleaks, npm audit, pip-audit, or cargo-audit are installed, the helper reports their availability as coverage metadata; missing tools do not break installation or scanning.
-
-Coverage is explicit. Inventory and scan payloads classify detected languages and workflows as `candidate-detector`, `profile-only`, or `unsupported`. Reports preserve those caveats so VibeSecurity does not imply broad coverage when only a narrow detector path ran.
-
-## Safety Boundaries
-
-VibeSecurity is for code you own or are authorized to assess. It does not perform live exploitation, credential theft, malware behavior, persistence, evasion, unauthorized network scanning, or secret exfiltration. It redacts likely secrets and prefers local reasoning, tests, and mock inputs over live exploit proof.
-
-## Design Philosophy
-
-VibeSecurity is a skill pack, not a scanner product.
-
-It starts cheap, stays local, and loads detail only when needed. The skill tells the agent how to think like a defensive reviewer, while the helper narrows attention to risky files and lines. That combination gives you the pressure point you want in a fast-moving codebase without dragging in a backend, package tree, or model-gateway dependency.

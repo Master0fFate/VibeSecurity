@@ -172,6 +172,7 @@ def test_local_vibesecurity_state_is_skipped() -> None:
 def test_glob_matches_middle_double_star_without_directory() -> None:
     assert glob_matches("pages/api/users.ts", "**/pages/api/**/*.ts")
     assert glob_matches("src/pages/api/admin/users.ts", "**/pages/api/**/*.ts")
+    assert glob_matches(r"SRC\PAGES\API\USERS.TS", "**/pages/api/**/*.ts")
     assert not glob_matches("pages/app/users.ts", "**/pages/api/**/*.ts")
 
 

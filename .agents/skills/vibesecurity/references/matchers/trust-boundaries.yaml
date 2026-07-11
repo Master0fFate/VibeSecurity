@@ -1,0 +1,167 @@
+- id: disabled-tls-verification
+  category: crypto
+  severity_hint: high
+  confidence_hint: high
+  globs:
+    - "**/*.py"
+    - "**/*.js"
+    - "**/*.ts"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+    - "**/*.php"
+  patterns:
+    - "verify=False"
+    - "verify = False"
+    - "rejectUnauthorized: false"
+    - "rejectUnauthorized = false"
+    - "InsecureSkipVerify: true"
+    - "NODE_TLS_REJECT_UNAUTHORIZED"
+    - "CURLOPT_SSL_VERIFYPEER"
+    - "ServerCertificateCustomValidationCallback"
+  reason: "TLS certificate or hostname verification may be disabled."
+  review_prompt: "Confirm the code is reachable outside an isolated test and restore fail-closed certificate and hostname verification."
+- id: token-signature-bypass
+  category: authn
+  severity_hint: critical
+  confidence_hint: high
+  globs:
+    - "**/*.py"
+    - "**/*.js"
+    - "**/*.ts"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+    - "**/*.php"
+  patterns:
+    - "verify_signature: false"
+    - '"verify_signature": false'
+    - "verify_signature': false"
+    - "algorithms: [none]"
+    - 'algorithms: ["none"]'
+    - "algorithms=['none']"
+    - "alg: none"
+    - "WithoutClaimsValidation"
+  nearby_terms:
+    - "jwt"
+    - "token"
+    - "signature"
+    - "algorithm"
+  reason: "Token verification may accept unsigned tokens or bypass signature or claims checks."
+  review_prompt: "Trace the authentication path and require an allowlisted algorithm, trusted key, signature, issuer, audience, and time-claim validation."
+- id: weak-security-randomness
+  category: crypto
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.js"
+    - "**/*.ts"
+    - "**/*.py"
+    - "**/*.java"
+    - "**/*.cs"
+    - "**/*.php"
+    - "**/*.rb"
+  patterns:
+    - "Math.random("
+    - "random.random("
+    - "new Random("
+    - "System.Random("
+    - "mt_rand("
+    - "rand("
+  nearby_terms:
+    - "token"
+    - "secret"
+    - "password"
+    - "reset"
+    - "session"
+    - "nonce"
+    - "otp"
+  reason: "A security-sensitive value may use a predictable random-number generator."
+  review_prompt: "Confirm the value protects a security boundary and replace predictable randomness with the platform CSPRNG."
+- id: sensitive-data-logging
+  category: privacy
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.py"
+    - "**/*.js"
+    - "**/*.ts"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+    - "**/*.php"
+  patterns:
+    - "console.log("
+    - "print("
+    - "logger."
+    - "logging."
+    - "fmt.Printf("
+    - "System.out.print"
+    - "Console.Write"
+  nearby_terms:
+    - "password"
+    - "secret"
+    - "token"
+    - "authorization"
+    - "cookie"
+    - "api_key"
+    - "personal"
+  reason: "Logs or diagnostics may expose credentials or sensitive personal data."
+  review_prompt: "Confirm the logged value and sink, then remove it or apply structured allowlisting and irreversible redaction."
+- id: archive-extraction-boundary
+  category: injection
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.py"
+    - "**/*.js"
+    - "**/*.ts"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+    - "**/*.php"
+  patterns:
+    - "extractall("
+    - "tarfile.extract("
+    - "ZipFile("
+    - "ZipArchive"
+    - "Archive::extract"
+    - "unzipper.Extract("
+  nearby_terms:
+    - "upload"
+    - "archive"
+    - "extract"
+    - "path"
+    - "destination"
+  reason: "Archive extraction may permit path traversal, symlink escape, or decompression resource abuse."
+  review_prompt: "Validate every member path and type against the destination, reject links and absolute paths, and bound expansion size and file count."
+- id: production-debug-mode
+  category: other
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.py"
+    - "**/*.js"
+    - "**/*.ts"
+    - "**/*.rb"
+    - "**/*.php"
+    - "**/*.yml"
+    - "**/*.yaml"
+  patterns:
+    - "DEBUG = True"
+    - "DEBUG=True"
+    - "debug=True"
+    - "APP_DEBUG=true"
+    - "display_errors = On"
+  nearby_terms:
+    - "production"
+    - "deploy"
+    - "host=0.0.0.0"
+    - "environment"
+    - "config"
+  reason: "Production-facing debug behavior may expose secrets, code, or an interactive debugger."
+  review_prompt: "Confirm deployment reachability and make production configuration fail closed with debug and verbose error output disabled."

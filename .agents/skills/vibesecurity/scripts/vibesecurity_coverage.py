@@ -5,7 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from vibesecurity_common import FileSelection, JsonMap, JsonValue, rel_path
+from vibesecurity_common import (
+    FileSelection,
+    JsonMap,
+    JsonValue,
+    display_path,
+    rel_path,
+)
 
 CANDIDATE_LANGUAGE_LEVELS: Final = {
     "typescript": "candidate-detector",
@@ -17,6 +23,8 @@ CANDIDATE_LANGUAGE_LEVELS: Final = {
     "java": "candidate-detector",
     "csharp": "candidate-detector",
     "php": "candidate-detector",
+    "powershell": "candidate-detector",
+    "batch": "candidate-detector",
 }
 PROFILE_LANGUAGE_LEVELS: Final = {
     "kotlin": "profile-only",
@@ -25,6 +33,15 @@ PROFILE_LANGUAGE_LEVELS: Final = {
     "elixir": "profile-only",
     "clojure": "profile-only",
     "sql": "profile-only",
+    "c": "profile-only",
+    "cpp": "profile-only",
+    "fsharp": "profile-only",
+    "visual-basic": "profile-only",
+    "dart": "profile-only",
+    "lua": "profile-only",
+    "r": "profile-only",
+    "solidity": "profile-only",
+    "bicep": "profile-only",
 }
 CANDIDATE_WORKFLOW_LEVELS: Final = {
     "github-actions": "candidate-detector",
@@ -34,6 +51,11 @@ CANDIDATE_WORKFLOW_LEVELS: Final = {
     "docker": "candidate-detector",
     "kubernetes": "candidate-detector",
     "terraform": "candidate-detector",
+}
+PROFILE_WORKFLOW_LEVELS: Final = {
+    "azure-pipelines": "profile-only",
+    "bitbucket-pipelines": "profile-only",
+    "bicep": "profile-only",
 }
 OPTIONAL_ADAPTERS: Final = {
     "ast-grep": "sg",
@@ -67,22 +89,26 @@ def level_for_language(language: str) -> str:
 
 
 def level_for_workflow(workflow: str) -> str:
-    return CANDIDATE_WORKFLOW_LEVELS.get(workflow, "unsupported")
+    if workflow in CANDIDATE_WORKFLOW_LEVELS:
+        return CANDIDATE_WORKFLOW_LEVELS[workflow]
+    return PROFILE_WORKFLOW_LEVELS.get(workflow, "unsupported")
 
 
 def adapter_status() -> list[JsonMap]:
     statuses: list[JsonMap] = []
     for adapter, executable in sorted(OPTIONAL_ADAPTERS.items()):
-        statuses.append({
-            "adapter": adapter,
-            "executable": executable,
-            "available": shutil.which(executable) is not None,
-        })
+        statuses.append(
+            {
+                "adapter": adapter,
+                "executable": executable,
+                "available": shutil.which(executable) is not None,
+            }
+        )
     return statuses
 
 
 def path_inventory(root: Path, selection: FileSelection) -> list[str]:
-    return [rel_path(root.resolve(), path) for path in selection.files]
+    return [display_path(rel_path(root.resolve(), path)) for path in selection.files]
 
 
 def unsupported_items(levels: list[JsonMap]) -> list[str]:
@@ -108,7 +134,10 @@ def coverage_payload(input_data: CoverageInput) -> JsonMap:
     workflows = string_list(input_data.project.get("workflows"))
     language_levels = level_entries(languages, False)
     workflow_levels = level_entries(workflows, True)
-    unsupported = [*unsupported_items(language_levels), *unsupported_items(workflow_levels)]
+    unsupported = [
+        *unsupported_items(language_levels),
+        *unsupported_items(workflow_levels),
+    ]
     considered = path_inventory(input_data.root, input_data.selection)
     return {
         "summary": "candidate detectors plus manual agent validation; unsupported/profile-only surfaces must be reviewed manually",

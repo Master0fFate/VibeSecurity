@@ -4,15 +4,40 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   helper:
-    runs-on: ubuntu-latest
+    name: Python ${{ matrix.python }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.11"
+          - os: ubuntu-latest
+            python: "3.14"
+          - os: windows-latest
+            python: "3.11"
+          - os: macos-latest
+            python: "3.11"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          python-version: "3.11"
-      - name: Compile helper scripts
-        run: PYTHONDONTWRITEBYTECODE=1 python -m py_compile .agents/skills/vibesecurity/scripts/*.py
-      - name: Run fixture regression tests
-        run: PYTHONDONTWRITEBYTECODE=1 python .agents/skills/vibesecurity/tests/run_tests.py
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile helper and tests
+        run: python -m compileall -q .agents/skills/vibesecurity/scripts .agents/skills/vibesecurity/tests
+      - name: Run regression and adversarial suite
+        run: python -B .agents/skills/vibesecurity/tests/run_tests.py

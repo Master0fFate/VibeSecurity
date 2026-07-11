@@ -148,3 +148,42 @@
     - "securityContext"
   reason: "Kubernetes workload may request privileged host access."
   review_prompt: "Check pod security context, host mounts, namespace/RBAC scope, and whether privileged access is required."
+- id: github-actions-broad-permissions
+  category: ci-cd
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/.github/workflows/*.yml"
+    - "**/.github/workflows/*.yaml"
+  patterns:
+    - "write-all"
+    - "contents: write"
+    - "actions: write"
+    - "packages: write"
+    - "id-token: write"
+  nearby_terms:
+    - "permissions:"
+    - "pull_request"
+    - "issue"
+    - "deploy"
+  reason: "Workflow permissions may exceed the job's required trust boundary."
+  review_prompt: "Confirm each write or OIDC permission is required and cannot be reached from untrusted event data or code."
+- id: circleci-privileged-job-boundary
+  category: ci-cd
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/.circleci/config.yml"
+    - "**/.circleci/config.yaml"
+  patterns:
+    - "setup_remote_docker"
+    - "docker_layer_caching"
+    - "run:"
+  nearby_terms:
+    - "deploy"
+    - "secret"
+    - "token"
+    - "sudo"
+    - "curl"
+  reason: "CircleCI job may combine privileged execution, credentials, or deployment with branch-controlled code."
+  review_prompt: "Check fork policy, contexts, secret scope, shell interpolation, remote Docker privileges, and deployment approvals."

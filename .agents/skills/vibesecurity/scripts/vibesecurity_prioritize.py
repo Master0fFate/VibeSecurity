@@ -11,15 +11,49 @@ SEVERITY_SCORE: Final = {
     "low": 20,
     "info": 5,
 }
-HIGH_VALUE_CATEGORIES: Final = {"authz", "authn", "ci-cd", "ai-agentic", "secrets", "supply-chain"}
+HIGH_VALUE_CATEGORIES: Final = {
+    "authz",
+    "authn",
+    "ci-cd",
+    "ai-agentic",
+    "secrets",
+    "supply-chain",
+}
 HIGH_VALUE_TERMS: Final = {
-    "admin", "auth", "billing", "payment", "checkout", "tenant", "permission", "role",
-    "deploy", "workflow", "secret", "token", "webhook", "agent", "tool", "llm",
+    "admin",
+    "auth",
+    "billing",
+    "payment",
+    "checkout",
+    "tenant",
+    "permission",
+    "role",
+    "deploy",
+    "workflow",
+    "secret",
+    "token",
+    "webhook",
+    "agent",
+    "tool",
+    "llm",
 }
 LOW_SIGNAL_PARTS: Final = {
-    "test", "tests", "fixtures", "fixture", "docs", "doc", "examples", "example",
-    "__snapshots__", "node_modules", "vendor",
+    "test",
+    "tests",
+    "fixtures",
+    "fixture",
+    "docs",
+    "doc",
+    "examples",
+    "example",
+    "references",
+    "matchers",
+    "templates",
+    "__snapshots__",
+    "node_modules",
+    "vendor",
 }
+LOW_SIGNAL_SUFFIXES: Final = {".md", ".txt"}
 
 
 def priority_fields(rel: str, severity: str, category: str, matcher_id: str) -> JsonMap:
@@ -33,13 +67,22 @@ def priority_fields(rel: str, severity: str, category: str, matcher_id: str) -> 
     if any(term in lower for term in HIGH_VALUE_TERMS):
         score += 12
         reasons.append("sensitive-path-term")
-    if ".github/workflows/" in lower or lower.endswith((".gitlab-ci.yml", "jenkinsfile")):
+    if ".github/workflows/" in lower or lower.endswith(
+        (".gitlab-ci.yml", "jenkinsfile")
+    ):
         score += 12
         reasons.append("workflow-boundary")
     if parts.intersection(LOW_SIGNAL_PARTS):
         score -= 25
         reasons.append("test-doc-fixture-penalty")
-    if matcher_id in {"github-actions-pr-target", "ai-output-to-shell", "missing-auth-route-candidate"}:
+    elif any(lower.endswith(suffix) for suffix in LOW_SIGNAL_SUFFIXES):
+        score -= 25
+        reasons.append("documentation-penalty")
+    if matcher_id in {
+        "github-actions-pr-target",
+        "ai-output-to-shell",
+        "missing-auth-route-candidate",
+    }:
         score += 8
         reasons.append("high-signal-matcher")
     return {"priority_score": score, "priority_reasons": reasons}

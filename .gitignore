@@ -1,12 +1,39 @@
+# Python and test output
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Generated VibeSecurity and local-tool state
 .vibesecurity/
 .vibesec/
 .omo/
 .codegraph/
+
+# Operating-system and editor debris
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*~
+
+# Local planning and audit artifacts
 vibesec-skill-conceptualization-plan.md
 vibesecurity-review.md
 vibesecurity-pressure-points-report.md

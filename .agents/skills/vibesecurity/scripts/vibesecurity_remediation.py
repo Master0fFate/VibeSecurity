@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Final
 
-from vibesecurity_common import JsonMap, JsonValue, redact
+from vibesecurity_common import (
+    MAX_FINDING_ITEMS,
+    JsonMap,
+    JsonValue,
+    display_path,
+    load_json_file,
+    visible_text,
+)
 from vibesecurity_report import map_items, standards_field, text_field
 
 CATEGORY_INVARIANTS: Final[dict[str, str]] = {
@@ -17,6 +23,9 @@ CATEGORY_INVARIANTS: Final[dict[str, str]] = {
     "supply-chain": "Build inputs must be pinned, reviewable, least-privileged, and provenance-aware before execution in trusted environments.",
     "ci-cd": "Trusted CI credentials and deployment paths must not execute attacker-controlled code or untrusted artifacts.",
     "ai-agentic": "AI outputs and retrieved content must be treated as untrusted data, with scoped tools, structured validation, approval gates, and auditability.",
+    "privacy": "Personal and sensitive data must be minimized, purpose-bound, access-controlled, retained deliberately, and excluded from unsafe logs or third parties.",
+    "crypto": "Security-sensitive cryptography must use vetted primitives, safe parameters, protected keys, and authenticated protocols without fail-open verification.",
+    "availability": "Attacker-controlled work must be bounded by quotas, timeouts, cancellation, backpressure, and per-principal resource accounting.",
 }
 
 CATEGORY_STEPS: Final[dict[str, tuple[str, ...]]] = {
@@ -65,6 +74,21 @@ CATEGORY_STEPS: Final[dict[str, tuple[str, ...]]] = {
         "Scope tools to the active user, tenant, and operation; require human approval for destructive, financial, external-message, credential, or deployment actions.",
         "Add regression tests for direct or indirect prompt injection, unsafe tool input, and approval boundaries.",
     ),
+    "privacy": (
+        "Remove unnecessary collection or exposure and enforce purpose, tenant, and role boundaries at the data access point.",
+        "Redact sensitive values from logs, traces, analytics, prompts, and third-party payloads; define retention and deletion behavior.",
+        "Add tests for unauthorized access, redaction, export, and deletion paths.",
+    ),
+    "crypto": (
+        "Replace custom, deprecated, deterministic, or fail-open cryptography with a maintained library and an approved authenticated construction.",
+        "Move keys to scoped secret storage and define rotation, versioning, and failure behavior.",
+        "Add known-answer, tamper, invalid-certificate, and rotation regression tests as applicable.",
+    ),
+    "availability": (
+        "Bound attacker-controlled input, fan-out, retries, concurrency, execution time, output size, and per-user or per-tenant cost.",
+        "Add cancellation, backpressure, and fail-closed behavior at the smallest shared resource boundary.",
+        "Add tests for limits, retry exhaustion, cancellation, and noisy-neighbor isolation.",
+    ),
 }
 
 DEFAULT_STEPS: Final[tuple[str, ...]] = (
@@ -92,7 +116,12 @@ def findings_from_json(value: JsonValue) -> list[JsonMap]:
 def selected_findings(items: list[JsonMap], finding_id: str) -> list[JsonMap]:
     if finding_id == "all":
         return items
-    return [item for item in items if text_field(item, "id", "") == finding_id or text_field(item, "matcher_id", "") == finding_id]
+    return [
+        item
+        for item in items
+        if text_field(item, "id", "") == finding_id
+        or text_field(item, "matcher_id", "") == finding_id
+    ]
 
 
 def remediation_steps(category: str) -> list[str]:
@@ -102,38 +131,77 @@ def remediation_steps(category: str) -> list[str]:
 def remediation_item(item: JsonMap, patch_allowed: bool) -> JsonMap:
     category = text_field(item, "category", "other")
     return {
-        "id": redact(text_field(item, "id", text_field(item, "matcher_id", "unknown"))),
-        "title": redact(text_field(item, "title", text_field(item, "matcher_id", "Security remediation"))),
-        "severity": redact(text_field(item, "severity", text_field(item, "severity_hint", "unknown"))),
-        "confidence": redact(text_field(item, "confidence", text_field(item, "confidence_hint", "unknown"))),
-        "category": redact(category),
-        "status": redact(text_field(item, "status", "needs-review")),
+        "id": visible_text(
+            text_field(item, "id", text_field(item, "matcher_id", "unknown")), 200
+        ),
+        "title": visible_text(
+            text_field(
+                item, "title", text_field(item, "matcher_id", "Security remediation")
+            ),
+            500,
+        ),
+        "severity": visible_text(
+            text_field(item, "severity", text_field(item, "severity_hint", "unknown")),
+            100,
+        ),
+        "confidence": visible_text(
+            text_field(
+                item, "confidence", text_field(item, "confidence_hint", "unknown")
+            ),
+            100,
+        ),
+        "category": visible_text(category, 100),
+        "status": visible_text(text_field(item, "status", "needs-review"), 100),
         "patch_allowed": patch_allowed,
-        "security_invariant": CATEGORY_INVARIANTS.get(category, "The confirmed attack path must be blocked at the smallest reliable trust boundary."),
+        "security_invariant": CATEGORY_INVARIANTS.get(
+            category,
+            "The confirmed attack path must be blocked at the smallest reliable trust boundary.",
+        ),
         "remediation_steps": remediation_steps(category),
-        "verification": redact(text_field(item, "verification", "Add or update a regression test, re-run the relevant security scan, and manually recheck the affected path.")),
+        "verification": visible_text(
+            text_field(
+                item,
+                "verification",
+                "Add or update a regression test, re-run the relevant security scan, and manually recheck the affected path.",
+            ),
+            2_000,
+        ),
         "standards": standards_field(item),
     }
 
 
 def blocked_item(item: JsonMap, reason: str) -> JsonMap:
     return {
-        "id": redact(text_field(item, "id", text_field(item, "matcher_id", "unknown"))),
-        "status": redact(text_field(item, "status", "needs-review")),
-        "category": redact(text_field(item, "category", "other")),
+        "id": visible_text(
+            text_field(item, "id", text_field(item, "matcher_id", "unknown")), 200
+        ),
+        "status": visible_text(text_field(item, "status", "needs-review"), 100),
+        "category": visible_text(text_field(item, "category", "other"), 100),
         "reason": reason,
     }
 
 
 def fix_plan_payload(input_path: Path, finding_id: str, review_only: bool) -> JsonMap:
-    data: JsonValue = json.loads(input_path.read_text(encoding="utf-8"))
-    selected = selected_findings(findings_from_json(data), finding_id)
+    data = load_json_file(input_path)
+    if not isinstance(data, (dict, list)):
+        raise ValueError("fix-plan input must be a JSON object or array")
+    findings = findings_from_json(data)
+    if len(findings) > MAX_FINDING_ITEMS:
+        raise ValueError(
+            f"fix-plan input exceeds {MAX_FINDING_ITEMS} finding and candidate items"
+        )
+    selected = selected_findings(findings, finding_id)
     patch_ready: list[JsonMap] = []
     review_items: list[JsonMap] = []
     blocked: list[JsonMap] = []
     for item in selected:
         if text_field(item, "status", "needs-review") != "confirmed":
-            blocked.append(blocked_item(item, "not patch-ready: validate reachability, boundary crossing, impact, and verification before remediation"))
+            blocked.append(
+                blocked_item(
+                    item,
+                    "not patch-ready: validate reachability, boundary crossing, impact, and verification before remediation",
+                )
+            )
             continue
         if review_only:
             review_items.append(remediation_item(item, False))
@@ -141,7 +209,11 @@ def fix_plan_payload(input_path: Path, finding_id: str, review_only: bool) -> Js
         patch_ready.append(remediation_item(item, True))
     return {
         "project": {},
-        "scope": {"mode": "fix-plan", "files_considered": [str(input_path)], "files_skipped": []},
+        "scope": {
+            "mode": "fix-plan",
+            "files_considered": [display_path(str(input_path))],
+            "files_skipped": [],
+        },
         "selected_finding": finding_id,
         "review_only": review_only,
         "patch_ready": patch_ready,
@@ -153,5 +225,8 @@ def fix_plan_payload(input_path: Path, finding_id: str, review_only: bool) -> Js
             "review_items": len(review_items),
             "blocked": len(blocked),
         },
+        "warnings": []
+        if selected
+        else [f"no finding matched '{visible_text(finding_id, 200)}'"],
         "candidates": [],
     }
