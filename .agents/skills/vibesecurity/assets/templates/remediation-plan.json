@@ -16,7 +16,7 @@
         "Add a regression test for allowed and denied principals."
       ],
       "verification": "Run the regression test, rerun VibeSecurity scan or recheck, and manually re-read the affected code path.",
-      "standards": "OWASP ASVS V4"
+      "standards": "OWASP ASVS 5.0 V8"
     }
   ],
   "blocked": [

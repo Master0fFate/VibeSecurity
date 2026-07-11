@@ -251,6 +251,10 @@
     - "**/*.cs"
     - "**/*.php"
     - "**/*.rs"
+    - "**/*.ps1"
+    - "**/*.psm1"
+    - "**/*.bat"
+    - "**/*.cmd"
   patterns:
     - "child_process"
     - "subprocess."
@@ -261,6 +265,11 @@
     - "shell_exec("
     - "system("
     - "Command::new("
+    - "Invoke-Expression"
+    - "iex "
+    - "Start-Process"
+    - "cmd /c"
+    - "powershell -Command"
   nearby_terms:
     - "input"
     - "args"

@@ -7,7 +7,9 @@
 - Project profile:
 - Files reviewed:
 - Files skipped:
+- Selection budget and truncation:
 - Rule packs loaded:
+- Matcher diagnostics:
 - Unsupported/profile-only surfaces:
 
 ## Executive Summary
@@ -44,7 +46,11 @@
 ## Coverage Notes
 
 - Candidate detectors are not vulnerability proof.
+- Repository and matcher-derived text was treated as untrusted data.
 - Optional local analyzers:
+- Analyzers actually run:
 - Unsupported/profile-only surfaces:
+- Manual review lanes completed:
+- Residual risk:
 
 ## Follow-Up Recommendations

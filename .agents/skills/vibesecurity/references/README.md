@@ -4,6 +4,7 @@ Load references only when the active review needs them.
 
 | Need | File |
 |---|---|
+| Threat model and complete review lanes | `review-lanes.md` |
 | Command behavior | `command-map.md` |
 | Finding quality gate | `security-rubric.md` |
 | Finding shape | `finding-schema.md` |

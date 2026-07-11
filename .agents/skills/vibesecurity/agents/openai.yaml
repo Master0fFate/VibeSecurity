@@ -1,6 +1,6 @@
 interface:
   display_name: "VibeSecurity"
-  short_description: "Defensive review for diffs, AI, web, and CI."
+  short_description: "Threat-led defensive review and remediation."
   default_prompt: "Use $vibesecurity diff to review changed code."
 policy:
   allow_implicit_invocation: false

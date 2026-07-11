@@ -148,3 +148,86 @@
     - "tool"
   reason: "Potential denial-of-wallet or runaway agent resource path."
   review_prompt: "Check quotas, timeouts, input limits, retry bounds, cancellation, and user/tenant cost attribution."
+- id: agent-memory-write-boundary
+  category: ai-agentic
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.py"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+  patterns:
+    - "memory.add("
+    - "memory.save("
+    - "vectorstore.add"
+    - "add_documents("
+    - "upsert("
+  nearby_terms:
+    - "agent"
+    - "user"
+    - "retriev"
+    - "instruction"
+    - "tool"
+  reason: "Untrusted content may persist into agent memory or shared retrieval state."
+  review_prompt: "Check write authorization, provenance, tenant isolation, expiry, poisoning resistance, and whether stored content can later control tools."
+- id: dynamic-agent-extension
+  category: ai-agentic
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.py"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+  patterns:
+    - "load_tool("
+    - "registerTool("
+    - "mcpServers"
+    - "mcp_server"
+    - "agent_card"
+    - "a2a"
+  nearby_terms:
+    - "url"
+    - "remote"
+    - "discover"
+    - "install"
+    - "config"
+    - "registry"
+  reason: "Runtime-discovered tools, agents, or MCP/A2A components may cross an unverified supply-chain boundary."
+  review_prompt: "Verify origin, integrity, identity, capabilities, transport, user consent, and revocation before loading or invoking the component."
+- id: agent-delegated-identity
+  category: ai-agentic
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.py"
+    - "**/*.go"
+    - "**/*.rb"
+    - "**/*.java"
+    - "**/*.cs"
+  patterns:
+    - "access_token"
+    - "service_account"
+    - "delegated_credentials"
+    - "oauth_token"
+    - "impersonate"
+  nearby_terms:
+    - "agent"
+    - "tool"
+    - "delegate"
+    - "tenant"
+    - "user"
+  reason: "An agent may hold or delegate identity with broader privileges or lifetime than the active user and task."
+  review_prompt: "Bind credentials to the user, tenant, task, audience, scope, and short lifetime; prevent confused-deputy and replay paths."

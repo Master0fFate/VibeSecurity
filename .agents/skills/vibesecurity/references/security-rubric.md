@@ -8,7 +8,9 @@ A finding must satisfy all five conditions:
 4. Specific: the affected file, function, line, route, workflow, or tool is named.
 5. Fixable: a concrete mitigation and verification step can be stated.
 
-Do not report style issues, generic warnings, tool hits without manual confirmation, or missing-context claims unless confidence is clearly low. Never print secret values.
+Before confirming, actively check counterevidence: guards, middleware, policy composition, safe framework defaults, sanitizers, environment gates, tests, and dead or unreachable code. Do not report style issues, generic warnings, tool hits without manual confirmation, or missing-context claims unless confidence is clearly low. Never print secret values.
+
+Calibrate severity from impact, exploitability, privileges, interaction, blast radius, and recovery. Calibrate confidence separately from evidence quality and missing runtime context. Matcher severity and confidence are triage hints only.
 
 ## Severity
 
@@ -21,3 +23,12 @@ Do not report style issues, generic warnings, tool hits without manual confirmat
 | Info | Coverage note, hardening suggestion, or documentation gap. |
 
 Use impact, reachability, exploitability, boundary crossed, and blast radius to choose severity.
+
+## Review Outcome
+
+- `confirmed`: all five conditions pass with direct code or effective-configuration evidence.
+- `needs-review`: signal is meaningful, but a required condition or counterevidence check is unresolved.
+- `fixed`: the vulnerable path was re-read and a decisive regression check passed.
+- `false-positive` or `wont-fix`: record the evidence or accepted risk; do not silently drop it.
+
+When no finding is confirmed, report reviewed lanes, proof performed, skipped/truncated surfaces, matcher diagnostics, and residual risk. Do not convert absence of evidence into assurance.
