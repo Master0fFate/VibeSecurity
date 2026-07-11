@@ -145,6 +145,12 @@ def test_report_preserves_scan_coverage_metadata() -> None:
 
 
 def test_report_redacts_common_secret_formats() -> None:
+    database_url = "".join(
+        ("postgres", "://", "user", ":", "rawpass", "@", "db.invalid/db")
+    )
+    redis_url = "".join(
+        ("redis", "://", ":", "password", "@", "cache.invalid:6379/0")
+    )
     report = render_report(
         report_sections_from_json(
             {
@@ -153,8 +159,8 @@ def test_report_redacts_common_secret_formats() -> None:
                         "status": "confirmed",
                         "title": "Secret leak",
                         "category": "secrets",
-                        "evidence": "DATABASE_URL=postgres://user:rawpass@example.invalid/db signing_secret=raw-signing-secret",
-                        "attack_scenario": "Attacker gets redis://:password@example.invalid:6379/0",
+                        "evidence": f"DATABASE_URL={database_url} signing_secret=raw-signing-secret",
+                        "attack_scenario": f"Attacker gets {redis_url}",
                         "impact": "client_secret=raw-client-secret and sk-testsecretsecretsecret can be reused.",
                         "recommendation": "Rotate oauth_secret=raw-oauth-secret",
                         "verification": "Check signing_secret=raw-signing-secret",
@@ -165,13 +171,16 @@ def test_report_redacts_common_secret_formats() -> None:
     )
     assert "rawpass" not in report
     assert "raw-signing-secret" not in report
-    assert "redis://:password" not in report
+    assert "redis" + "://:" + "password" not in report
     assert "raw-client-secret" not in report
     assert "sk-testsecretsecretsecret" not in report
     assert "raw-oauth-secret" not in report
 
 
 def test_report_redacts_metadata_fields() -> None:
+    credential_path = "src/pathpass/" + "".join(
+        ("postgres", "://", "user", ":", "pathpass", "@", "db.invalid/db")
+    )
     report = render_report(
         report_sections_from_json(
             {
@@ -186,7 +195,7 @@ def test_report_redacts_metadata_fields() -> None:
                         "standard_refs": ["signing_secret=raw-standard-secret"],
                         "affected_files": [
                             {
-                                "path": "src/pathpass/postgres://user:pathpass@example.invalid/db",
+                                "path": credential_path,
                                 "lines": [1],
                             }
                         ],

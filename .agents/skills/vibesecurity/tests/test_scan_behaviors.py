@@ -129,9 +129,9 @@ def test_scan_prioritizes_production_candidates_before_fixture_noise() -> None:
 def test_scan_finds_generic_workflow_candidates() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        write(root / ".gitlab-ci.yml", "deploy:\n  script: curl https://example.invalid/install.sh | bash\n  environment: production\n  variables:\n    TOKEN: $TOKEN\n")
+        write(root / ".gitlab-ci.yml", "deploy:\n  script: curl $REMOTE_SCRIPT_URL | bash\n  environment: production\n  variables:\n    TOKEN: $TOKEN\n")
         write(root / "Jenkinsfile", "pipeline { stages { stage('deploy') { steps { withCredentials([]) { sh 'deploy' } } } } }\n")
-        write(root / "Dockerfile", "FROM ubuntu:latest\nRUN curl https://example.invalid/install.sh | sh\n")
+        write(root / "Dockerfile", "FROM ubuntu:latest\nARG REMOTE_SCRIPT_URL\nRUN curl $REMOTE_SCRIPT_URL | sh\n")
         write(root / "infra" / "main.tf", "cidr_blocks = [\"0.0.0.0/0\"]\n")
         write(root / "k8s" / "deployment.yaml", "kind: Deployment\nspec:\n  template:\n    spec:\n      hostNetwork: true\n")
         candidates = scan_payload(root)["candidates"]

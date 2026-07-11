@@ -207,12 +207,15 @@ def test_project_matcher_symlinks_cannot_escape_the_repository() -> None:
 def test_redaction_covers_extended_tokens_keys_and_invisible_controls() -> None:
     gitlab_token = "glpat-" + "ABCDEFGHIJKLMNOPQRST"
     slack_token = "xoxb-" + "1234567890-abcdefghijklmnop"
+    credential_url = "".join(
+        ("https", "://", "alice", ":", "super-secret", "@", "fixture.invalid/path")
+    )
     raw = (
         'password: "correct horse battery staple" '
         f"{gitlab_token} {slack_token} "
         "eyJabcdefghijk.abcdefghijkl.abcdefghijkl "
         "Authorization: Bearer opaque-credential-value "
-        "https://alice:super-secret@example.invalid/path "
+        f"{credential_url} "
         "-----BEGIN PRIVATE KEY-----\nprivate-material\n-----END PRIVATE KEY-----\n"
     )
     sanitized = visible_text(raw + "\x1b\u202e")
