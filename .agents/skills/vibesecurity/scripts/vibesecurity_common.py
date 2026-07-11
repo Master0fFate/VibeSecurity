@@ -266,7 +266,13 @@ def redacted_snippet(path: Path, line: str) -> str:
 
 
 def rel_path(root: Path, path: Path) -> str:
-    return path.relative_to(root).as_posix()
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        relative = path.resolve().relative_to(root.resolve())
+    if ".." in relative.parts:
+        relative = path.resolve().relative_to(root.resolve())
+    return relative.as_posix()
 
 
 def read_text(path: Path) -> str:

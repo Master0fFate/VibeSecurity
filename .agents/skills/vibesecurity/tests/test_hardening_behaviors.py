@@ -41,7 +41,9 @@ def test_selection_budget_and_skipped_output_are_bounded() -> None:
 
 def test_selection_reports_walk_permission_errors() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
+        base = Path(tmp)
+        (base / "alias").mkdir()
+        root = base / "alias" / ".."
 
         def failing_walk(*args: object, **kwargs: object):
             onerror = kwargs["onerror"]
