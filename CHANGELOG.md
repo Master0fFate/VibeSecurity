@@ -6,8 +6,7 @@ semantic versioning for the helper CLI and the matcher/format schemas together.
 
 ## [3.0.0] - 2026-08-17
 
-Enterprise upgrade program implemented (see `docs/ENTERPRISE-UPGRADE-PROGRAM.md`
-for the full design). Breaking: confirmed findings now require source citations,
+Enterprise upgrade program implemented. Breaking: confirmed findings now require source citations,
 and helper exit codes are a documented contract.
 
 ### Added — detection currency (track A)
@@ -77,7 +76,7 @@ and helper exit codes are a documented contract.
 - Integration recipes: GitHub Actions, GitLab CI, Jenkins, Azure DevOps,
   pre-commit (`docs/integrations/`).
 - Version and support policy: semantic versioning, latest-minor support,
-  release checklist (`docs/RELEASE-CHECKLIST.md`).
+  release checklist maintained by maintainers.
 
 ### Changed
 

@@ -207,9 +207,9 @@ VibeSecurity is for defensive review of authorized code. It does not perform liv
 
 The helper is not a data-flow engine. A clean scan means only that no bundled matcher, secret-format rule, or cached advisory fired inside the reported selection budget. SCA matches say a pinned version is inside an advisory range — exploitability in your code still needs review. Version comparison supports the semver and PEP 440 subset documented in the tests; unparseable versions are reported, never guessed. `feed refresh` is the only networked command. The final report must state manual checks, skipped/truncated surfaces, unsupported areas, tools actually run, and residual risk.
 
-## Enterprise Roadmap
+## Enterprise Capabilities
 
-The enterprise upgrade program in [`docs/ENTERPRISE-UPGRADE-PROGRAM.md`](docs/ENTERPRISE-UPGRADE-PROGRAM.md) is implemented in this release (3.0.0): advisory currency via OSV/GHSA/KEV feeds with staleness downgrading, lockfile-driven SCA, a token-format secret engine plus git-history scanning, mandatory CVE/advisory citations on every confirmed finding, a verify harness, CI gating with exit codes, SARIF output, expiring baselines, policy configuration, and air-gap bundles. Remaining limits are stated in the program document and in Safety and Limits below.
+Release 3.0.0 added advisory currency (OSV/GHSA/KEV feeds with staleness downgrading), lockfile-driven SCA, a token-format secret engine plus git-history scanning, mandatory CVE/advisory citations on every confirmed finding, a verify harness, CI gating with exit codes, SARIF output, expiring baselines, policy configuration, and air-gap bundles. Limits are stated in Safety and Limits below; history is in the `CHANGELOG.md`.
 
 ## Repository Layout
 
