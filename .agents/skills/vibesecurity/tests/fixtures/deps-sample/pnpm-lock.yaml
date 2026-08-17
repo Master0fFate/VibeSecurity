@@ -1,0 +1,20 @@
+lockfileVersion: '6.0'
+
+dependencies:
+  express:
+    specifier: ^4.18.2
+    version: 4.18.2
+
+packages:
+
+  /express@4.18.2:
+    resolution: {integrity: sha512-aaa}
+    dev: false
+
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-bbb}
+    dev: false
+
+  /debug@4.3.4:
+    resolution: {integrity: sha512-ccc}
+    dev: false

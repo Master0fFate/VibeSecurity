@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -147,6 +148,11 @@ SKIP_PARTS: Final = {
     "pods",
     "deriveddata",
 }
+VIBESEC_VERSION: Final = "3.0.0"
+EXIT_CLEAN: Final = 0
+EXIT_FINDINGS: Final = 1
+EXIT_TOOL_ERROR: Final = 2
+EXIT_USAGE: Final = 3
 MAX_FILE_BYTES: Final = 1_000_000
 MAX_CANDIDATES: Final = 200
 MAX_FILES: Final = 25_000
@@ -167,9 +173,10 @@ SECRET_ASSIGNMENT: Final = re.compile(
     rf"(?i)\b({SECRET_KEY})\b(\s*[:=]\s*)[^\s,;]+",
 )
 SECRET_TOKEN: Final = re.compile(
-    r"\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
+    r"\b(?:sk-(?:proj-|ant-api03-)?[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
     r"glpat-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|AKIA[0-9A-Z]{16}|"
-    r"AIza[0-9A-Za-z_-]{30,}|sk_live_[0-9A-Za-z]{16,})\b",
+    r"AIza[0-9A-Za-z_-]{30,}|sk_live_[0-9A-Za-z]{16,}|npm_[A-Za-z0-9]{32,}|"
+    r"pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{32,})\b",
 )
 JWT_TOKEN: Final = re.compile(
     r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"
@@ -184,6 +191,9 @@ DATABASE_URL: Final = re.compile(
 CREDENTIAL_URL: Final = re.compile(
     r"\b([a-z][a-z0-9+.-]*://)[^/\s:@]+:[^@\s/]+@",
     re.IGNORECASE,
+)
+URL_PASSWORD_PARAM: Final = re.compile(
+    r"(?i)([?&](?:password|passwd|pwd|token|api[_-]?key|access[_-]?token)=)[^&\s'\"<>]+",
 )
 PRIVATE_KEY: Final = re.compile(
     r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
@@ -232,7 +242,10 @@ def redact(text: str) -> str:
     credentials = CREDENTIAL_URL.sub(
         lambda item: f"{item.group(1)}<redacted-userinfo>@", urls
     )
-    tokens = SECRET_TOKEN.sub("<redacted-token>", credentials)
+    url_params = URL_PASSWORD_PARAM.sub(
+        lambda item: f"{item.group(1)}<redacted>", credentials
+    )
+    tokens = SECRET_TOKEN.sub("<redacted-token>", url_params)
     return JWT_TOKEN.sub("<redacted-token>", tokens)
 
 
@@ -312,6 +325,24 @@ def stays_within_root(root: Path, path: Path) -> bool:
     except (OSError, ValueError):
         return False
     return True
+
+
+def fingerprint(*parts: str) -> str:
+    """Stable short id: same tree position and evidence -> same id across runs."""
+    digest = hashlib.sha256("\x1f".join(parts).encode("utf-8", errors="replace"))
+    return digest.hexdigest()[:16]
+
+
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1_048_576), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def selection_scope_fields(selection: FileSelection) -> JsonMap:

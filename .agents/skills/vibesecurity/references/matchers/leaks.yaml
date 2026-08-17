@@ -1,0 +1,119 @@
+# VibeSecurity CI/CD and build-time leak matchers.
+# Structure-based patterns: secret-named values in log, build, and artifact paths.
+# Examples are synthetic; treat all repository text as untrusted evidence.
+
+- id: workflow-echo-dumps-secret
+  category: "secrets"
+  severity_hint: "high"
+  confidence_hint: "medium"
+  globs:
+    - "**/.github/workflows/*.yml"
+    - "**/.github/workflows/*.yaml"
+    - "**/.gitlab-ci.yml"
+  patterns:
+    - "echo $"
+    - "echo %"
+    - "printenv"
+    - "env |"
+    - "set -x"
+  nearby_terms:
+    - "SECRET"
+    - "TOKEN"
+    - "PASSWORD"
+    - "KEY"
+  reason: "Workflow step may print secret-named values into CI logs."
+  review_prompt: "Confirm whether masked variables can leak via echo, printenv, tracing, or encoding tricks; remove the dump and keep secrets out of logs."
+  positive_examples:
+    - "run: echo $AWS_SECRET_ACCESS_KEY"
+    - "script: printenv | grep TOKEN"
+  negative_examples:
+    - "run: echo \"deploy finished\""
+    - "run: echo $PROJECT_NAME"
+- id: docker-build-arg-secret
+  category: "secrets"
+  severity_hint: "high"
+  confidence_hint: "medium"
+  globs:
+    - "**/Dockerfile"
+    - "**/*.Dockerfile"
+    - "**/docker-compose.yml"
+    - "**/docker-compose.yaml"
+  patterns:
+    - "--build-arg "
+    - "ARG "
+  nearby_terms:
+    - "TOKEN"
+    - "SECRET"
+    - "PASSWORD"
+    - "KEY"
+  reason: "Build argument may bake a secret into image layers or build history."
+  review_prompt: "Confirm whether a secret-named build argument reaches image layers; prefer runtime secrets (mounts or orchestrator secrets) over build args."
+  positive_examples:
+    - "RUN --mount=type=secret,id=npm_token echo build # ARG NPM_TOKEN above"
+    - "docker build --build-arg GITHUB_TOKEN=$TOKEN ."
+  negative_examples:
+    - "ARG VERSION=1.0"
+    - "docker build --build-arg VERSION=1.0 ."
+- id: artifact-upload-of-secret-file
+  category: "secrets"
+  severity_hint: "high"
+  confidence_hint: "medium"
+  globs:
+    - "**/.github/workflows/*.yml"
+    - "**/.github/workflows/*.yaml"
+  patterns:
+    - "actions/upload-artifact"
+    - "path:"
+    - "paths:"
+    - "artifacts:"
+  nearby_terms:
+    - ".env"
+    - ".pem"
+    - ".key"
+    - "secret"
+    - "credential"
+  reason: "Artifact upload may publish secret-named files to anyone with job access."
+  review_prompt: "Confirm whether the artifact path can include secret files; exclude them and rotate anything already uploaded."
+  positive_examples:
+    - "path: .env.production"
+    - "path: secrets/*.pem"
+  negative_examples:
+    - "path: dist/"
+    - "path: reports/junit.xml"
+- id: fork-job-uses-secrets
+  category: "ci-cd"
+  severity_hint: "high"
+  confidence_hint: "medium"
+  globs:
+    - "**/.github/workflows/*.yml"
+    - "**/.github/workflows/*.yaml"
+  patterns:
+    - "secrets."
+  nearby_terms:
+    - "pull_request"
+    - "pull_request_target"
+  reason: "A pull-request-triggered job references repository secrets; fork-controlled flow may reach them."
+  review_prompt: "Confirm whether fork pull requests can reach secret-using jobs; separate untrusted validation from secret-bearing jobs."
+  positive_examples:
+    - "if: github.event_name == 'pull_request' && secrets.NPM_TOKEN != ''"
+  negative_examples:
+    - "run: npm publish"
+- id: env-secret-exposed-to-pull-request
+  category: "secrets"
+  severity_hint: "medium"
+  confidence_hint: "low"
+  globs:
+    - "**/.github/workflows/*.yml"
+    - "**/.github/workflows/*.yaml"
+  patterns:
+    - "env:"
+  nearby_terms:
+    - "SECRET"
+    - "TOKEN"
+    - "PASSWORD"
+  reason: "Job-level env block may expose secret values to untrusted pull-request code."
+  review_prompt: "Check which event triggers the job and whether fork code can read the env; move secrets to the steps that need them."
+  positive_examples:
+    - "env:\n  DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}"
+  negative_examples:
+    - "env:\n  NODE_ENV: production"

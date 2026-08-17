@@ -9,11 +9,13 @@ It is intentionally not a scanner platform, SaaS service, plugin runtime, or gia
 ## What Makes It Different
 
 - **Threat-led, not matcher-led:** every review covers assets, actors, entry points, trust boundaries, sensitive flows, high-impact operations, and 13 compact review lanes.
-- **Evidence before severity:** candidates and confirmed findings remain separate through scan, report, and remediation.
+- **Evidence before severity:** candidates and confirmed findings remain separate through scan, report, and remediation; confirmed findings require source citations (CVE, GHSA, OSV, KEV, vendor advisory, standard, or documented pattern).
+- **Advisory currency:** `feed refresh` pulls OSV (which aggregates GitHub GHSA advisories) and the CISA KEV catalog into a checksummed local cache; `scan` matches pinned dependency versions offline and downgrades to `needs-review` when data is stale (default 72 h). Air-gapped teams use exported bundles with verified checksums.
+- **Leak coverage:** 17 vendor-documented credential formats, entropy-gated candidates, a bounded git-history secret scan, and CI/CD plus AI-context leak matchers. Values are never emitted in any output.
 - **Hostile-input aware:** repository text and project-local matcher prose are treated as untrusted data, never instructions. Output redacts secrets and neutralizes terminal controls, invisible direction changes, HTML, and Markdown structure.
-- **Coverage truth:** selection budgets, skipped counts and samples, candidate truncation, matcher diagnostics, rule packs, optional-tool availability, and profile-only surfaces are preserved in output.
-- **Bounded by design:** files, bytes, matcher files, matcher counts, JSON inputs, emitted text, and retained candidates have explicit limits.
-- **Local and portable:** the helper uses Python's standard library only and is tested on Windows, macOS, and Linux.
+- **Coverage truth:** selection budgets, skipped counts and samples, candidate truncation, matcher diagnostics, rule packs, optional-tool availability, advisory-data provenance, and profile-only surfaces are preserved in output.
+- **Bounded by design:** files, bytes, matcher files, matcher counts, JSON inputs, emitted text, retained candidates, git-history walks, and network fetches have explicit limits.
+- **Local and portable:** the helper uses Python's standard library only and is tested on Windows, macOS, and Linux; every command except `feed refresh` runs offline with no network use.
 - **Current baselines:** OWASP ASVS 5.0.0, OWASP LLM Top 10 2025, OWASP Agentic Top 10 2026, NIST SSDF/SP 800-218A, CISA Secure by Design, and SLSA.
 
 No security review is literally gapless. VibeSecurity's stronger guarantee is that important lanes are considered and unreviewed or unsupported surfaces remain visible instead of being mistaken for safety.
@@ -100,6 +102,10 @@ python -B .agents/skills/vibesecurity/scripts/vibesecurity.py diff --root .
 python -B .agents/skills/vibesecurity/scripts/vibesecurity.py scan --root .
 python -B .agents/skills/vibesecurity/scripts/vibesecurity.py report --root . --input .vibesecurity/findings.json
 python -B .agents/skills/vibesecurity/scripts/vibesecurity.py fix-plan --root . --input .vibesecurity/findings.json --finding all
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py deps --root .
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py feed refresh --root .
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py history --root .
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py verify --root . --input .vibesecurity/findings.json --finding all
 ```
 
 Use `python3 -B` when that is the platform's launcher. On Windows, `py -3 -B` is also supported. The helper itself contains no shell-specific commands.
@@ -108,11 +114,31 @@ Helper commands:
 
 - `inventory` — detect languages, frameworks, AI SDKs, package managers, routes, CI, containers, and infrastructure surfaces.
 - `diff` — return NUL-safe changed-file inventory and risk categories; Git failures become warnings.
-- `scan` — return bounded, prioritized review candidates.
+- `scan` — bounded, prioritized review candidates from matchers and the secret engine; with `--advisory-db`, also offline SCA against OSV/GHSA/KEV data; with `--run-analyzers`, execute opted-in local analyzers.
 - `report` — render confirmed, closed, and needs-review items separately while preserving input coverage metadata.
-- `fix-plan` — emit patch-ready guidance only for `status: confirmed`; never edits source.
+- `fix-plan` — patch-ready guidance only for `status: confirmed` items with validated `sources`; confirmed items without citations are blocked as `missing-source`; never edits source.
+- `deps` — lockfile/manifest dependency inventory with explicit `unsupported` records for Maven, Gradle, yarn berry, Hex, NuGet, and Swift.
+- `feed refresh|status|export|import` — refresh or inspect the advisory cache; export or verify air-gap bundles.
+- `history` — bounded git-history secret scan; reports `only_in_history` items; never prints values.
+- `verify` — rerun scan surfaces and a test command, then report `verified | still-present | test-failed | inconclusive` per finding.
+- `baseline` — show baseline state, including expired suppressions that re-fire.
 
 `--input` and `--output` paths are resolved and confined to `--root`, so behavior does not depend on the caller's current working directory or follow repository symlinks outside the review scope.
+
+### Exit codes and CI gating
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Clean: no findings at or above the `--fail-on` threshold |
+| 1 | Findings at or above the threshold (confirmed findings only; candidates never fail a build) |
+| 2 | Tool error or incomplete scan — never silently clean |
+| 3 | Usage error |
+
+`--fail-on` accepts `none` (default), `confirmed`, `confirmed-high`, or `critical`. `--format sarif` emits SARIF 2.1.0 with partial fingerprints. Recipes for GitHub Actions, GitLab CI, Jenkins, Azure DevOps, and pre-commit live in `docs/integrations/`.
+
+### Policy configuration
+
+`.vibesecurity/config.json` (schema 1), all optional: `network_enabled` (default true), `fail_on` (default none), `max_cache_age_hours` (72), `history_window_months` (12), `baseline_max_age_days` (180), `allowed_analyzers`. Precedence: CLI > config > defaults; unknown keys produce warnings. Baselines live in `.vibesecurity/baseline.json` with mandatory `expires_on`; expired suppressions re-fire visibly and corrupted baselines never silence findings.
 
 ## How a Review Works
 
@@ -179,11 +205,11 @@ CI runs the suite on Windows, macOS, and Linux against the minimum supported Pyt
 
 VibeSecurity is for defensive review of authorized code. It does not perform live exploitation, credential theft, persistence, evasion, malware behavior, unauthorized network scanning, or secret exfiltration. Safe proof means code-path reasoning, local tests, mocks, and harmless fixtures.
 
-The helper is not a data-flow engine. A clean scan means only that no bundled substring matcher fired inside the reported selection budget. The final report must state manual checks, skipped/truncated surfaces, unsupported areas, tools actually run, and residual risk.
+The helper is not a data-flow engine. A clean scan means only that no bundled matcher, secret-format rule, or cached advisory fired inside the reported selection budget. SCA matches say a pinned version is inside an advisory range — exploitability in your code still needs review. Version comparison supports the semver and PEP 440 subset documented in the tests; unparseable versions are reported, never guessed. `feed refresh` is the only networked command. The final report must state manual checks, skipped/truncated surfaces, unsupported areas, tools actually run, and residual risk.
 
 ## Enterprise Roadmap
 
-VibeSecurity's known limitation: it has no advisory data ingestion (CVE/GHSA/OSV/KEV), no dependency version matching, and substring-only secret detection. The committed plan that closes these gaps — detection currency, leak coverage, fix provenance, and CI/enterprise workflow readiness — lives in [`docs/ENTERPRISE-UPGRADE-PROGRAM.md`](docs/ENTERPRISE-UPGRADE-PROGRAM.md). Nothing in that plan is implemented yet; this README describes current capability only.
+The enterprise upgrade program in [`docs/ENTERPRISE-UPGRADE-PROGRAM.md`](docs/ENTERPRISE-UPGRADE-PROGRAM.md) is implemented in this release (3.0.0): advisory currency via OSV/GHSA/KEV feeds with staleness downgrading, lockfile-driven SCA, a token-format secret engine plus git-history scanning, mandatory CVE/advisory citations on every confirmed finding, a verify harness, CI gating with exit codes, SARIF output, expiring baselines, policy configuration, and air-gap bundles. Remaining limits are stated in the program document and in Safety and Limits below.
 
 ## Repository Layout
 

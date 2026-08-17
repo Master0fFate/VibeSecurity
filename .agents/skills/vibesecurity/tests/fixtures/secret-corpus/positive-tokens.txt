@@ -1,0 +1,21 @@
+# Synthetic secret-detection corpus. Every value below is fake and was generated
+# for this file; none is a real credential. Used by the secrets test suite to
+# measure recall and precision of the format engine.
+
+AKIAIOSFODNN7EXAMPLE
+ghp_0123456789abcdefghijklmnopqrstuvwxyzAB
+github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz1234567890
+glpat-0123456789abcdefghijklmnopqrst
+xoxb-0123456789abcdefghi
+sk-proj0123456789abcdefghijklmnopqrstuvwxyz
+sk-ant-api03-0123456789abcdefghijklmnopqrstuvwxyz
+AIza0123456789abcdefghijklmnopqrstuvwxy
+npm_0123456789abcdefghijklmnopqrstuvwxyz0123
+pypi-AgEIcHlwaS5vcmc0123456789abcdefghijklmnopqrstuvwxyz
+SG.0123456789abcdef0123456789abcdef.0123456789abcdef0123456789abcdef
+SK0123456789abcdef0123456789abcdef01234567
+-----BEGIN RSA PRIVATE KEY-----
+eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U
+postgres://admin:s3cretpw@example.internal:5432/prod
+redis://svc:passw0rd123@cache.internal:6379/0
+mongodb+srv://user99:hunter2secret@cluster.example.net/db

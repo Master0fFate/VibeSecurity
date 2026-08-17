@@ -45,6 +45,25 @@ ALLOWED_CATEGORIES: Final = {
 }
 ALLOWED_SEVERITIES: Final = {"critical", "high", "medium", "low", "info"}
 ALLOWED_CONFIDENCE: Final = {"high", "medium", "low"}
+PROJECT_SPECIFIC_MARKERS: Final = (
+    "\\Users\\",
+    "/home/",
+    "/Users/",
+    "C:\\",
+    "D:\\",
+)
+
+
+def is_project_specific_value(value: str) -> bool:
+    """Reject absolute paths, home expansions, and user-directory markers.
+
+    Bundled and taught matchers must describe vulnerability classes, never one
+    machine, user, or repository.
+    """
+    stripped = value.strip()
+    if stripped.startswith("/") or stripped.startswith("~"):
+        return True
+    return any(marker in stripped for marker in PROJECT_SPECIFIC_MARKERS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +166,31 @@ def parse_matcher_file(path: Path) -> list[Matcher]:
     return matchers
 
 
+def validate_matcher_examples(matcher: Matcher) -> tuple[int, int, list[str]]:
+    """Run a matcher's own examples through the engine.
+
+    Returns (positives_fired, negatives_fired, problems). Every bundled
+    matcher must fire on all positive examples and on no negative examples.
+    """
+    problems: list[str] = []
+    positives = 0
+    negatives = 0
+    for example in matcher.positive_examples:
+        lines = example.splitlines() or [example]
+        if any(
+            matcher_matches_line(matcher, line, lines) for line in lines
+        ):
+            positives += 1
+        else:
+            problems.append(f"positive example did not fire: {example[:80]}")
+    for example in matcher.negative_examples:
+        lines = example.splitlines() or [example]
+        if any(matcher_matches_line(matcher, line, lines) for line in lines):
+            negatives += 1
+            problems.append(f"negative example fired: {example[:80]}")
+    return positives, negatives, problems
+
+
 def parse_matcher_file_with_warnings(path: Path) -> tuple[list[Matcher], list[str]]:
     try:
         size = path.stat().st_size
@@ -227,6 +271,10 @@ def invalid_matcher_reason(draft: dict[str, str], lists: dict[str, list[str]]) -
             return f"{field} exceeds {MAX_LIST_VALUES} values"
         if any(not value or len(value) > MAX_FIELD_CHARS for value in values):
             return f"{field} contains an empty or oversized value"
+        if field in {"globs", "patterns"}:
+            for value in values:
+                if is_project_specific_value(value):
+                    return f"{field} value looks project-specific or machine-specific: {value[:80]}"
     for field in ("reason", "review_prompt"):
         if len(draft.get(field, "")) > MAX_FIELD_CHARS:
             return f"{field} exceeds {MAX_FIELD_CHARS} characters"

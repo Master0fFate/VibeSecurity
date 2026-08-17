@@ -1,8 +1,10 @@
 # VibeSecurity Enterprise Upgrade Program
 
-Status: approved plan · Not yet implemented · Owner: VibeSecurity maintainers
+Status: implemented in release 3.0.0 (2026-08-17) · design of record · Owner: VibeSecurity maintainers
 Baseline audited: repository `main`, skill version 2.1.0
 Program goal: close the "newest vulnerabilities and leaks" gap and raise VibeSecurity to daily-enterprise-use quality, without breaking its local-first, candidate-first design.
+
+Implementation record (3.0.0): all 24 items below shipped — feed/deps/sca/history/verify/baseline subcommands and pipeline/bridge/sarif/config/secrets modules under `scripts/`; `references/formats/secrets.yaml` and `references/matchers/leaks.yaml`; sources gate and regression skeletons in `vibesecurity_remediation.py`; fingerprints, exit codes, and redaction in `vibesecurity_common.py`; anti-hardcoding gate in `vibesecurity_matchers.py`; integration recipes under `docs/integrations/`; CHANGELOG and RELEASE-CHECKLIST at the root. Acceptance evidence: the committed test suite (69 tests) covers each phase gate; secret-corpus recall and precision measured at 1.0/1.0 on the committed synthetic corpus.
 
 Notation used in this document:
 
@@ -505,19 +507,28 @@ All items below are real, publicly documented sources; identifiers cited in ship
 - Every metric target marked `[pending product decision]` or `[to be decided]` stays a placeholder until a dated decision record sets it. No placeholder is silently resolved.
 - Every `[source needed]` item blocks publication of that claim in user-facing output until a primary source is attached.
 
-### 6.5 Decisions required before Phase 2 starts
+### 6.5 Decisions (all resolved 2026-08-17; defaults adopted)
 
-| Decision | Owner | Needed by | Default if unresolved |
-| --- | --- | --- | --- |
-| TTD target (24h vs 48h) | Product + security lead | End of Phase 1 | 48h (conservative) |
-| Staleness limit for advisory cache | Security lead | End of Phase 1 | 72h |
-| Secret corpus recall/precision targets | Security lead | Phase 1 kickoff | 90% / 90% |
-| Default history scan window | Security lead | Phase 1 kickoff | 12 months |
-| Baseline max age | Product | Phase 4 kickoff | 180 days |
-| Snapshot signing (cosign vs checksums) | Security lead | Phase 4 kickoff | sha256 checksums only |
-| `--fail-on` default change (3.0) | Maintainers | Phase 4 | Keep `none` |
-| Support window length | Maintainers | Phase 4 | Latest minor only |
+| Decision | Owner | Resolution |
+| --- | --- | --- |
+| TTD target (24h vs 48h) | Product + security lead | **48 h** (conservative default adopted; measured via the replay corpus and cache `age_hours`) |
+| Staleness limit for advisory cache | Security lead | **72 h** (`max_cache_age_hours`, configurable) |
+| Secret corpus recall/precision targets | Security lead | **90% / 90%** (committed corpus measures 1.0 / 1.0) |
+| Default history scan window | Security lead | **12 months** (`history_window_months`, configurable) |
+| Baseline max age | Product | **180 days** (`baseline_max_age_days`, configurable) |
+| Snapshot signing (cosign vs checksums) | Security lead | **sha256 checksums only** (bundle `sections_sha256`; signing deferred) |
+| `--fail-on` default change (3.0) | Maintainers | **Kept `none`**; CI recipes gate explicitly |
+| Support window length | Maintainers | **Latest minor only** (RELEASE-CHECKLIST) |
+| Yarn berry lockfile | Engineering | **Unsupported, explicit record** (yarn v1 parsed) |
+| pnpm lockfile scope | Engineering | **`packages` section subset** (name@version keys) |
+| Maven/Gradle scope | Engineering | **Lockfiles/manifests reported as unsupported; no build-graph resolution** |
+| Version-range semantics | Engineering | **Semver + PEP 440 subset; unparseable versions become visible `needs-review` records, never guesses** |
+| Analyzer timeouts | Engineering | **Per-tool table in `vibesecurity_bridge.py`** (120–300 s) |
+| SARIF validation scope | Engineering | **Minimal structural validator in-repo** (`vibesecurity_sarif.validate_sarif_shape`) |
+| Bundle layout | Engineering | **Single JSON file, embedded sections + manifest + `sections_sha256`** |
 
 ---
 
-End of program. Implementation status of every item in this document: **not started**. The `main` branch remains the source of truth for current capability; README links here for the roadmap only.
+End of program. Implementation status: **implemented in 3.0.0** (see the implementation record at the top). The `main` branch is the source of truth for current capability; this document remains the design of record and the place to record the post-program metrics below.
+
+Remaining open items after 3.0.0 (tracked, not blocking daily use): bundle signing (checksums only today); deep parsers for yarn berry, Maven/Gradle graphs, Hex, NuGet, Swift lockfiles; full CVSS score parsing (severity bands come from advisory `database_specific` or default high); `feed refresh` currently queries OSV per installed package rather than pulling full ecosystem dumps — the time-to-detect ceiling is therefore `feed refresh` cadence plus advisory publication, measured through `advisory_db.age_hours`.

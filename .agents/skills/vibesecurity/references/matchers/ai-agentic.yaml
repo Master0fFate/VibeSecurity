@@ -231,3 +231,79 @@
     - "user"
   reason: "An agent may hold or delegate identity with broader privileges or lifetime than the active user and task."
   review_prompt: "Bind credentials to the user, tenant, task, audience, scope, and short lifetime; prevent confused-deputy and replay paths."
+- id: secret-into-model-payload
+  category: secrets
+  severity_hint: high
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.py"
+  patterns:
+    - "prompt"
+    - "messages"
+    - "input"
+    - "content"
+  nearby_terms:
+    - "token"
+    - "secret"
+    - "password"
+    - "api_key"
+    - "credential"
+  reason: "Secret-named values may be assembled into a model payload and leave the trust boundary."
+  review_prompt: "Trace the assembled payload; strip or substitute credentials before any model API call, and keep prompts out of logs."
+  positive_examples:
+    - "messages: [{ role: user, content: api_key + query }]"
+    - "const prompt = `use token ${token}: ${question}`"
+  negative_examples:
+    - "messages: [{ role: user, content: question }]"
+- id: agent-memory-writes-secret
+  category: secrets
+  severity_hint: medium
+  confidence_hint: medium
+  globs:
+    - "**/*.ts"
+    - "**/*.js"
+    - "**/*.py"
+  patterns:
+    - "memory.save"
+    - "memory.write"
+    - "store(" 
+    - "remember("
+  nearby_terms:
+    - "token"
+    - "secret"
+    - "password"
+    - "credential"
+  reason: "Agent memory persistence may capture credential values into long-lived storage."
+  review_prompt: "Confirm whether secret-bearing strings can be persisted; exclude credentials from memory stores and purge old entries."
+  positive_examples:
+    - "memory.save(f\"token={token}\")"
+  negative_examples:
+    - "memory.save(summary)"
+- id: tool-call-embeds-token
+  category: secrets
+  severity_hint: medium
+  confidence_hint: low
+  globs:
+    - "**/*.ts"
+    - "**/*.js"
+    - "**/*.py"
+  patterns:
+    - "tool_call"
+    - "invoke_tool"
+    - "call_tool"
+    - "tool_input"
+    - "arguments"
+  nearby_terms:
+    - "token"
+    - "secret"
+    - "password"
+    - "api_key"
+  reason: "Tool-call arguments may embed credential values readable by tool providers or logs."
+  review_prompt: "Pass credentials through scoped runtime injection, never through model-controlled tool arguments."
+  positive_examples:
+    - "tool_call(name='deploy', arguments={'api_key': token})"
+  negative_examples:
+    - "tool_call(name='deploy', arguments={'region': region})"

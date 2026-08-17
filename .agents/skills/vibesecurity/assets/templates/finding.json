@@ -5,6 +5,16 @@
   "confidence": "high|medium|low",
   "status": "confirmed|needs-review|fixed|wont-fix|false-positive",
   "category": "authz|authn|injection|ssrf|xss|secrets|supply-chain|ci-cd|ai-agentic|privacy|crypto|availability|other",
+  "fingerprint": "stable locator hash emitted by the helper",
+  "sources": [
+    {"type": "CVE|GHSA|OSV|KEV|vendor-advisory|standard|documented-pattern", "id": "CVE-2024-1234", "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-1234"}
+  ],
+  "advisory_fix": {
+    "advisory_id": "OSV-0000-0000",
+    "installed_version": "1.1.0",
+    "fixed_versions": ["1.2.0"],
+    "recommended_version": "1.2.0"
+  },
   "standard_refs": ["OWASP-ASVS-v5.0.0", "OWASP-LLM01:2025"],
   "affected_files": [
     {

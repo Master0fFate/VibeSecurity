@@ -97,6 +97,82 @@ DEFAULT_STEPS: Final[tuple[str, ...]] = (
     "Add a regression test that fails on the vulnerable behavior and passes after the patch.",
 )
 
+SOURCE_TYPES: Final[frozenset[str]] = frozenset(
+    {"CVE", "GHSA", "OSV", "KEV", "vendor-advisory", "standard", "documented-pattern"}
+)
+
+REGRESSION_TEST_BLOCKS: Final[dict[str, str]] = {
+    "authz": "Add a test that requests the protected object as (a) an authorized principal of the same tenant and (b) an unauthorized principal; assert 403/redirect for (b) and success for (a). Place it beside the existing route or policy tests.",
+    "authn": "Add a test that calls the protected handler with no credentials, expired credentials, and valid credentials; assert failure for the first two. Place it beside the existing auth middleware tests.",
+    "injection": "Add a test that feeds the previously reachable payload through the public entry point and asserts the interpreter/query layer never receives the raw string. Place it beside existing handler tests.",
+    "ssrf": "Add a test that requests an internal/private destination through the fetch boundary and asserts it is rejected before any outbound connection. Place it beside existing HTTP client tests.",
+    "xss": "Add a test that renders the previously unsafe payload and asserts the exact output context encodes it. Place it beside existing rendering tests.",
+    "secrets": "Add a check that the secret pattern is absent from the repository, fixtures, and generated output (grep-style test), and document the rotation record outside the repo.",
+    "supply-chain": "Add a lockfile or workflow check that fails if the pinned version/digest changes to an unreviewed value. Place it in CI config or a dependency test.",
+    "ci-cd": "Add a workflow lint/test that fails when a privileged job checks out untrusted refs or exceeds least-privilege permissions.",
+    "ai-agentic": "Add tests for direct and indirect prompt injection, unsafe tool input rejection, and approval-gate enforcement at the agent boundary.",
+    "privacy": "Add tests that unauthorized access, export, and log paths exclude the sensitive value, and that deletion removes it everywhere.",
+    "crypto": "Add known-answer, tamper-detection, invalid-certificate, and rotation tests as applicable to the primitive in use.",
+    "availability": "Add tests for limit enforcement, retry exhaustion, cancellation, and noisy-neighbor isolation at the shared boundary.",
+}
+
+DEFAULT_REGRESSION_TEST: Final[str] = (
+    "Add the smallest test that fails before the fix and passes after it, placed beside the code under test."
+)
+
+
+def validated_sources(item: JsonMap) -> list[JsonMap]:
+    """Return well-formed source citations from a findings item."""
+    raw = item.get("sources")
+    if not isinstance(raw, list):
+        return []
+    sources: list[JsonMap] = []
+    for value in raw[:32]:
+        if not isinstance(value, dict):
+            continue
+        source_type = value.get("type")
+        source_id = value.get("id")
+        url = value.get("url")
+        if (
+            isinstance(source_type, str)
+            and source_type in SOURCE_TYPES
+            and isinstance(source_id, str)
+            and 3 <= len(source_id) <= 200
+            and (url is None or isinstance(url, str))
+        ):
+            entry: JsonMap = {
+                "type": source_type,
+                "id": visible_text(source_id, 200),
+            }
+            if isinstance(url, str) and url:
+                entry["url"] = visible_text(url, 500)
+            sources.append(entry)
+    return sources
+
+
+def advisory_fix_guidance(item: JsonMap) -> JsonMap:
+    """C2: recommended versions come verbatim from advisory fixed events."""
+    raw = item.get("advisory_fix")
+    if not isinstance(raw, dict):
+        return {}
+    recommended = raw.get("recommended_version")
+    fixed_events = raw.get("fixed_versions")
+    guidance: JsonMap = {}
+    if isinstance(recommended, str) and isinstance(fixed_events, list):
+        known = {str(event) for event in fixed_events}
+        if recommended in known:
+            guidance["recommended_version"] = recommended
+            guidance["recommended_version_source"] = "advisory fixed event"
+        else:
+            guidance["recommended_version"] = None
+            guidance["warning"] = (
+                "recommended version not present in advisory fixed events; refusing to suggest"
+            )
+    elif isinstance(fixed_events, list) and not fixed_events:
+        guidance["recommended_version"] = None
+        guidance["warning"] = "no fixed version published in advisory; no upgrade suggested"
+    return guidance
+
 
 def findings_from_json(value: JsonValue) -> list[JsonMap]:
     if isinstance(value, list):
@@ -158,6 +234,11 @@ def remediation_item(item: JsonMap, patch_allowed: bool) -> JsonMap:
             "The confirmed attack path must be blocked at the smallest reliable trust boundary.",
         ),
         "remediation_steps": remediation_steps(category),
+        "regression_test": visible_text(
+            REGRESSION_TEST_BLOCKS.get(category, DEFAULT_REGRESSION_TEST), 1_000
+        ),
+        "sources": validated_sources(item),
+        "advisory_fix": advisory_fix_guidance(item),
         "verification": visible_text(
             text_field(
                 item,
@@ -200,6 +281,14 @@ def fix_plan_payload(input_path: Path, finding_id: str, review_only: bool) -> Js
                 blocked_item(
                     item,
                     "not patch-ready: validate reachability, boundary crossing, impact, and verification before remediation",
+                )
+            )
+            continue
+        if not validated_sources(item):
+            blocked.append(
+                blocked_item(
+                    item,
+                    "missing-source: confirmed findings require at least one validated source citation (CVE, GHSA, OSV, KEV, vendor-advisory, standard, or documented-pattern)",
                 )
             )
             continue

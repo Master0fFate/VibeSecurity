@@ -2,7 +2,7 @@
 name: vibesecurity
 description: Defensive, evidence-first security review for code the user owns or is authorized to assess. Use for explicit VibeSecurity invocations ($vibesecurity in Codex or /vibesecurity in Claude Code) and reviews of diffs, applications, APIs, AI agents, dependencies, secrets, CI/CD, infrastructure, auth, injection, SSRF, privacy, cryptography, and abuse paths. Do not use for ordinary refactors or unauthorized/offensive testing.
 metadata:
-  version: "2.1.0"
+  version: "3.0.0"
 ---
 
 # VibeSecurity
@@ -27,7 +27,10 @@ Invoke the skill as `$vibesecurity <command>` in Codex or `/vibesecurity <comman
 - `scan [scope]` — run bounded deterministic discovery, then validate ranked candidates manually.
 - `deep <path|feature|risk>` — perform a threat-led review of one explicit scope.
 - `ai [scope]` — review LLM, agent, MCP/A2A, retrieval, memory, identity, tool, and cost boundaries.
+- `feed [refresh|status]` — refresh or inspect the local OSV/GHSA/KEV advisory cache.
+- `history` — run the bounded git-history secret scan and report rotation needs.
 - `recheck [finding-id|all]` — re-evaluate evidence and regression tests after changes.
+- `verify [finding-id|all]` — rerun scan surfaces and tests to prove a fix landed.
 - `fix <finding-id|all> [--review-only]` — remediate confirmed findings or return a non-writing plan.
 - `teach <finding-id>` — turn one confirmed local pattern into a constrained candidate matcher with positive and negative examples.
 
@@ -49,17 +52,27 @@ The agent commands and local helper commands are intentionally different:
 - `brief` uses helper `inventory` plus manual threat modeling.
 - `diff` uses helper `diff` plus manual path review.
 - `scan` uses helper `scan`; candidates still require validation.
-- `recheck` may use `scan` and `report`, then manually reassesses status.
+- `feed` uses helper `feed refresh|status|export|import` for the advisory cache (OSV, which aggregates GitHub GHSA advisories, plus the CISA KEV catalog).
+- `history` uses helper `history` for the bounded git-history secret scan.
+- `verify` uses helper `verify` with stable fingerprints and an optional test command.
+- `recheck` may use `scan`, `report`, and `verify`, then manually reassesses status.
 - `fix` may use `fix-plan`; the helper never patches source.
 - `deep`, `ai`, and `teach` are agent workflows guided by references.
+
+Helper exit codes are a contract for CI: 0 clean, 1 findings at or above `--fail-on`, 2 tool error or incomplete scan, 3 usage error. Candidates never fail a build; only confirmed findings can. Use `--format sarif` for SARIF 2.1.0 output, `--advisory-db <dir|bundle>` for offline advisory data, and `.vibesecurity/config.json` (schema 1) for policy: `network_enabled`, `fail_on`, `max_cache_age_hours` (default 72), `history_window_months` (default 12), `baseline_max_age_days` (default 180), `allowed_analyzers`. Baselines live in `.vibesecurity/baseline.json` with mandatory `expires_on`; expired suppressions re-fire visibly.
 
 Repository-local example:
 
 ```text
 python -B .agents/skills/vibesecurity/scripts/vibesecurity.py scan --root .
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py feed refresh --root .
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py history --root .
+python -B .agents/skills/vibesecurity/scripts/vibesecurity.py verify --root . --input .vibesecurity/findings.json --finding all
 ```
 
 For a global installation, replace the script path with the absolute path beside the loaded `SKILL.md`.
+
+Helper commands: `inventory`, `diff`, `scan`, `report`, `fix-plan`, `deps`, `feed refresh|status|export|import`, `sca`, `history`, `verify`, `baseline`. All commands stay local and offline by default; only `feed refresh` touches the network, and it refuses when `network_enabled` is false or `--offline` is set.
 
 ## Finding Gate
 

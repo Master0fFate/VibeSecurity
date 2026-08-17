@@ -1,0 +1,11 @@
+[[package]]
+name = "celery"
+version = "5.3.4"
+
+[[package]]
+name = "redis"
+version = "5.0.1"
+
+[[package]]
+name = "click"
+version = "8.1.7"

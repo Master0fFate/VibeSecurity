@@ -1,0 +1,21 @@
+# Negative corpus: benign strings that must NOT trigger the format engine.
+# Generated for this file; no real data.
+
+The quick brown fox jumps over the lazy dog.
+internationalization and localization are long words
+https://example.com/docs/getting-started
+postgres host db.internal.example port 5432 database app
+user@example.org
+version 1.2.3 build 2024.06.29-abcdef
+sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+AKIASHORTKEY
+ghp_tiny
+xoxb-mini
+sk_live_tiny
+SG.short.short
+-----BEGIN PUBLIC KEY-----
+not-a-jwt-token
+echo "deployment finished"
+const config = { retries: 3, timeout: 30 };
+def calculate_total(items): return sum(item.price for item in items)
+SELECT id, name FROM users WHERE active = 1;

@@ -9,6 +9,7 @@ from vibesecurity_common import (
     JsonMap,
     MAX_CANDIDATES,
     display_path,
+    fingerprint,
     read_text,
     redacted_snippet,
     rel_path,
@@ -27,6 +28,7 @@ from vibesecurity_matchers import (
     matcher_matches_line,
 )
 from vibesecurity_prioritize import candidate_sort_key, priority_fields
+from vibesecurity_secrets import SecretFormat, parse_formats, secret_candidates
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +115,7 @@ def scan_candidates(
     root: Path,
     selection: FileSelection | None = None,
     catalog: MatcherCatalog | None = None,
+    secret_formats: tuple[SecretFormat, ...] | None = None,
 ) -> ScanResult:
     root = root.resolve()
     candidates: list[JsonMap] = []
@@ -120,8 +123,16 @@ def scan_candidates(
     selected = selection or select_repo_files(root)
     matcher_catalog = catalog or load_matcher_catalog(root)
     matchers = matcher_catalog.matchers
+    formats = secret_formats if secret_formats is not None else parse_formats()[0]
     for path in selected.files:
         rel = rel_path(root, path)
+        text = read_text(path)
+        for secret_candidate in secret_candidates(display_path(rel), rel, text, formats):
+            candidates.append(secret_candidate)
+            total_candidates += 1
+            if len(candidates) >= MAX_CANDIDATES * 2:
+                candidates.sort(key=candidate_sort_key)
+                del candidates[MAX_CANDIDATES:]
         path_matchers = [
             matcher
             for matcher in matchers
@@ -129,7 +140,7 @@ def scan_candidates(
         ]
         if not path_matchers:
             continue
-        lines = read_text(path).splitlines()
+        lines = text.splitlines()
         for line_index, line in enumerate(lines):
             window: list[str] | None = None
             for matcher in path_matchers:
@@ -153,6 +164,8 @@ def scan_candidates(
                         "severity_hint": matcher.severity_hint,
                         "confidence_hint": matcher.confidence_hint,
                         "status": "needs-review",
+                        "source": "matcher",
+                        "fingerprint": fingerprint("matcher", matcher.matcher_id, rel, matcher.reason),
                     }
                     candidate.update(
                         priority_fields(

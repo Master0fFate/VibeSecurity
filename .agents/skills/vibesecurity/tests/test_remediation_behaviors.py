@@ -13,7 +13,7 @@ def test_fix_plan_requires_confirmed_findings() -> None:
         input_path = Path(tmp) / "findings.json"
         write(input_path, json.dumps({
             "findings": [
-                {"id": "VSEC-0001", "status": "confirmed", "category": "authz", "title": "Missing object authorization", "verification": "Denied user gets 403."},
+                {"id": "VSEC-0001", "status": "confirmed", "category": "authz", "title": "Missing object authorization", "verification": "Denied user gets 403.", "sources": [{"type": "standard", "id": "OWASP ASVS 5.0 V4.3"}]},
                 {"id": "VSEC-0002", "status": "needs-review", "category": "ssrf", "title": "Candidate fetch"},
             ],
             "candidates": [{"matcher_id": "possible-secret-literal", "status": "needs-review", "category": "secrets"}],
@@ -35,7 +35,7 @@ def test_fix_plan_requires_confirmed_findings() -> None:
 def test_fix_plan_review_only_blocks_patch_ready_output() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         input_path = Path(tmp) / "findings.json"
-        write(input_path, json.dumps({"findings": [{"id": "VSEC-0001", "status": "confirmed", "category": "ai-agentic", "title": "Unsafe tool use"}]}))
+        write(input_path, json.dumps({"findings": [{"id": "VSEC-0001", "status": "confirmed", "category": "ai-agentic", "title": "Unsafe tool use", "sources": [{"type": "standard", "id": "OWASP LLM01:2025"}]}]}))
         payload = fix_plan_payload(input_path, "VSEC-0001", True)
     assert payload["patch_ready"] == []
     review_items = payload["review_items"]

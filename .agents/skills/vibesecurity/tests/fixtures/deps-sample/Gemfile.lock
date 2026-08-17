@@ -1,0 +1,12 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    rails (7.0.8)
+    rack (2.2.8)
+    puma (6.3.1)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  rails
