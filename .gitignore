@@ -21,6 +21,8 @@ dist/
 !.env.example
 
 # Generated VibeSecurity and local-tool state
+# (.vibesecurity/ also holds the future advisory cache from the enterprise program's
+#  `feed` subcommand — see docs/ENTERPRISE-UPGRADE-PROGRAM.md, item A1)
 .vibesecurity/
 /skills-lock.json
 .vibesec/

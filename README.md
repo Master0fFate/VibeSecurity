@@ -181,6 +181,10 @@ VibeSecurity is for defensive review of authorized code. It does not perform liv
 
 The helper is not a data-flow engine. A clean scan means only that no bundled substring matcher fired inside the reported selection budget. The final report must state manual checks, skipped/truncated surfaces, unsupported areas, tools actually run, and residual risk.
 
+## Enterprise Roadmap
+
+VibeSecurity's known limitation: it has no advisory data ingestion (CVE/GHSA/OSV/KEV), no dependency version matching, and substring-only secret detection. The committed plan that closes these gaps — detection currency, leak coverage, fix provenance, and CI/enterprise workflow readiness — lives in [`docs/ENTERPRISE-UPGRADE-PROGRAM.md`](docs/ENTERPRISE-UPGRADE-PROGRAM.md). Nothing in that plan is implemented yet; this README describes current capability only.
+
 ## Repository Layout
 
 ```text
@@ -195,4 +199,5 @@ The helper is not a data-flow engine. A clean scan means only that no bundled su
   scripts/
   assets/templates/
   tests/
+docs/
 ```
