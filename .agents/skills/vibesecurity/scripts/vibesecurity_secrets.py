@@ -10,12 +10,15 @@ from vibesecurity_common import (
     SECRET_KEY,
     JsonMap,
     fingerprint,
+    register_redaction_patterns,
     visible_text,
 )
+from vibesecurity_standards import standards_block
 
 FORMATS_FILE: Final = Path(__file__).resolve().parents[1] / "references" / "formats" / "secrets.yaml"
-MAX_FORMATS: Final = 128
+MAX_FORMATS: Final = 256
 MAX_REGEX_CHARS: Final = 500
+MAX_SCAN_LINE_CHARS: Final = 20_000
 ENTROPY_MIN_LENGTH: Final = 25
 ENTROPY_CANDIDATE: Final = re.compile(r"[A-Za-z0-9+/_-]{25,}")
 HEX_TOKEN: Final = re.compile(r"\A[0-9a-fA-F]+\Z")
@@ -28,6 +31,8 @@ ENTROPY_THRESHOLDS: Final = {
 }
 ALLOWED_SEVERITIES: Final = {"critical", "high", "medium", "low", "info"}
 ALLOWED_CONFIDENCE: Final = {"high", "medium", "low"}
+ALLOWED_SOURCES: Final = {"vendor-doc", "gitleaks-default-config", "observed"}
+SECRET_CWE: Final = "CWE-798"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,11 +43,12 @@ class SecretFormat:
     regex: re.Pattern[str]
     description: str
     review_prompt: str
+    source: str = "unspecified"
 
 
 @dataclass(frozen=True, slots=True)
 class SecretHit:
-    kind: str  # "format" or "entropy"
+    kind: str
     format_id: str
     line: int
     column: int
@@ -50,6 +56,7 @@ class SecretHit:
     confidence_hint: str
     description: str
     review_prompt: str
+    source: str = "unspecified"
 
 
 def parse_formats(path: Path = FORMATS_FILE) -> tuple[tuple[SecretFormat, ...], tuple[str, ...]]:
@@ -69,7 +76,7 @@ def parse_formats(path: Path = FORMATS_FILE) -> tuple[tuple[SecretFormat, ...], 
             _add_format(draft, formats, warnings)
             draft = {"id": line.split(":", 1)[1].strip().strip("\"'")}
             continue
-        if ":" not in line:
+        if ":" not in line or line.startswith("- "):
             continue
         key, value = line.split(":", 1)
         draft[key.strip()] = value.strip().strip("\"'")
@@ -103,6 +110,10 @@ def _add_format(draft: dict[str, str], formats: list[SecretFormat], warnings: li
     if severity not in ALLOWED_SEVERITIES or confidence not in ALLOWED_CONFIDENCE:
         warnings.append(f"format '{format_id}' invalid severity/confidence; ignored")
         return
+    source = draft.get("source", "unspecified")
+    if source not in ALLOWED_SOURCES:
+        warnings.append(f"format '{format_id}' has unknown source '{source[:40]}'; recorded as unspecified")
+        source = "unspecified"
     formats.append(
         SecretFormat(
             format_id=format_id,
@@ -113,8 +124,12 @@ def _add_format(draft: dict[str, str], formats: list[SecretFormat], warnings: li
             review_prompt=draft.get(
                 "review_prompt", "Validate the credential is real without printing it."
             ),
+            source=source,
         )
     )
+
+
+register_redaction_patterns(tuple(item.regex for item in parse_formats()[0]))
 
 
 def shannon_entropy(token: str) -> float:
@@ -136,7 +151,6 @@ def _entropy_class(token: str) -> str:
 
 
 def entropy_hit(token: str) -> bool:
-    """B2: high-entropy candidate gated on charset class and length."""
     if len(token) < ENTROPY_MIN_LENGTH:
         return False
     token_class = _entropy_class(token)
@@ -146,18 +160,29 @@ def entropy_hit(token: str) -> bool:
     return shannon_entropy(token) >= threshold
 
 
+def _overlaps(spans: list[tuple[int, int]], start: int, end: int) -> bool:
+    return any(start < taken_end and end > taken_start for taken_start, taken_end in spans)
+
+
 def scan_text(text: str, formats: tuple[SecretFormat, ...]) -> list[SecretHit]:
-    """Run format regexes and the entropy layer over one file's text."""
+    """Run format regexes and the entropy layer over one file's text.
+
+    Formats are evaluated in library order; a later format never fires on a
+    span already claimed by an earlier, more specific format on the same line.
+    """
     hits: list[SecretHit] = []
-    seen: set[tuple[str, int]] = set()
-    lines = text.splitlines()
-    for line_index, line in enumerate(lines, start=1):
+    for line_index, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line[:MAX_SCAN_LINE_CHARS]
+        spans: list[tuple[int, int]] = []
+        fired: set[str] = set()
         for secret_format in formats:
             for match in secret_format.regex.finditer(line):
-                key = (secret_format.format_id, line_index)
-                if key in seen:
+                if _overlaps(spans, match.start(), match.end()):
                     continue
-                seen.add(key)
+                spans.append((match.start(), match.end()))
+                if secret_format.format_id in fired:
+                    continue
+                fired.add(secret_format.format_id)
                 hits.append(
                     SecretHit(
                         kind="format",
@@ -168,16 +193,14 @@ def scan_text(text: str, formats: tuple[SecretFormat, ...]) -> list[SecretHit]:
                         confidence_hint=secret_format.confidence_hint,
                         description=secret_format.description,
                         review_prompt=secret_format.review_prompt,
+                        source=secret_format.source,
                     )
                 )
         if SECRET_CONTEXT.search(line):
             for match in ENTROPY_CANDIDATE.finditer(line):
-                token = match.group(0)
-                if entropy_hit(token):
-                    key = ("high-entropy-literal", line_index)
-                    if key in seen:
-                        continue
-                    seen.add(key)
+                if _overlaps(spans, match.start(), match.end()):
+                    continue
+                if entropy_hit(match.group(0)):
                     hits.append(
                         SecretHit(
                             kind="entropy",
@@ -188,6 +211,7 @@ def scan_text(text: str, formats: tuple[SecretFormat, ...]) -> list[SecretHit]:
                             confidence_hint="low",
                             description="High-entropy value assigned in a secret-named context.",
                             review_prompt="Check whether this value is a real credential without printing it.",
+                            source="entropy-layer",
                         )
                     )
                     break
@@ -203,6 +227,7 @@ def secret_candidates(
     """Produce scan candidates for one file. Values are never emitted."""
     loaded, warnings = parse_formats() if formats is None else (formats, ())
     candidates: list[JsonMap] = []
+    standards = standards_block(SECRET_CWE, "", "", "secrets")
     for hit in scan_text(text, loaded):
         candidates.append(
             {
@@ -218,6 +243,9 @@ def secret_candidates(
                 "confidence_hint": hit.confidence_hint,
                 "status": "needs-review",
                 "source": "secret-engine",
+                "format_source": hit.source,
+                "cwe": SECRET_CWE,
+                "standards": standards,
                 "fingerprint": fingerprint("secret", hit.format_id, rel),
             }
         )
@@ -240,6 +268,35 @@ def secret_candidates(
             }
         )
     return candidates
+
+
+SAMPLE_ALPHABETS: Final = {
+    "alnum": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+    "lower": "abcdefghijklmnopqrstuvwxyz",
+    "upper": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+    "hex": "0123456789abcdef",
+    "digits": "0123456789",
+    "b32": "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567",
+    "bech32": "QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L",
+    "b64": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/",
+}
+SAMPLE_PLACEHOLDER: Final = re.compile(r"\{(alnum|lower|upper|hex|digits|b32|bech32|b64):(\d{1,4})\}")
+
+
+def expand_sample(template: str) -> str:
+    """Expand {class:length} placeholders so token-shaped strings never sit in git.
+
+    Corpus and fixture files store shapes such as sk-ant-api03-{alnum:95};
+    the expansion happens only in memory, so no secret scanner or push
+    protection rule ever sees a complete token at rest.
+    """
+
+    def fill(match: re.Match[str]) -> str:
+        alphabet = SAMPLE_ALPHABETS[match.group(1)]
+        length = int(match.group(2))
+        return (alphabet * (length // len(alphabet) + 1))[:length]
+
+    return SAMPLE_PLACEHOLDER.sub(fill, template)
 
 
 def corpus_scores(

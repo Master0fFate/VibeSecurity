@@ -1,0 +1,424 @@
+# VibeSecurity matchers for the failure modes documented in vibe-coded apps.
+# Evidence: CVE-2025-48757 (Lovable/Supabase RLS, 170 of 1,645 apps), the Tea app
+# Firebase storage exposure (July 2025), the Moltbook Supabase exposure (Jan 2026),
+# and Escape.tech's October 2025 scan (400+ exposed secrets across 5,600 apps).
+# See references/evidence-base.md for sources. Restricted YAML subset; see
+# high-signal.yaml for field semantics.
+
+- id: supabase-rls-disabled
+  category: authz
+  severity_hint: critical
+  confidence_hint: high
+  cwe: "CWE-862, CWE-285"
+  owasp: "A01:2025"
+  asvs: "V8.2.2, V8.3.1"
+  globs:
+    - "**/*.sql"
+    - "**/supabase/**/*"
+    - "**/migrations/**/*"
+    - "**/schema*.ts"
+    - "**/schema*.js"
+  patterns:
+    - "disable row level security"
+    - "using (true)"
+    - "using ( true )"
+    - "with check (true)"
+    - "with check ( true )"
+    - "using true"
+  regex_patterns:
+    - "(?i)grant\s+(?:all|insert|update|delete)\b[^\n]*\bto\s+(?:anon|public|authenticated)\b"
+  reason: "Row Level Security is disabled or a policy grants every row to every caller; with the public anon key in the browser bundle, anyone can read or write the table (the CVE-2025-48757 pattern)."
+  review_prompt: "Enable RLS on every table the anon or authenticated role can reach and write policies that scope rows to auth.uid() or the caller's tenant."
+  positive_examples:
+    - "alter table public.profiles disable row level security;"
+    - "create policy \"allow all\" on public.orders for all using (true);"
+  negative_examples:
+    - "alter table public.profiles enable row level security;"
+    - "create policy \"own rows\" on public.orders for select using (auth.uid() = user_id);"
+- id: supabase-service-key-in-client
+  category: secrets
+  severity_hint: critical
+  confidence_hint: medium
+  cwe: "CWE-798, CWE-200"
+  owasp: "A02:2025"
+  asvs: "V14.3.3, V8.3.1"
+  globs:
+    - "**/*.tsx"
+    - "**/*.jsx"
+    - "**/*.vue"
+    - "**/*.svelte"
+    - "**/*.html"
+    - "**/components/**/*.ts"
+    - "**/components/**/*.js"
+    - "**/hooks/**/*.ts"
+    - "**/hooks/**/*.js"
+    - "**/public/**/*.js"
+    - "**/supabase/client.*"
+    - "**/supabaseClient.*"
+    - "**/*.client.ts"
+    - "**/*.client.js"
+  patterns:
+    - "service_role"
+    - "SUPABASE_SERVICE_ROLE_KEY"
+    - "SUPABASE_SERVICE_KEY"
+    - "sb_secret_"
+    - "SUPABASE_SECRET_KEY"
+  exclude_patterns:
+    - "// server only"
+    - "server-only"
+  reason: "A Supabase service_role or secret key is referenced in browser-facing code; it bypasses Row Level Security, so shipping it in the bundle exposes the whole database (the Moltbook and Escape.tech pattern)."
+  review_prompt: "Confirm the file is bundled for the browser; move the key to a server-only module or edge function and rotate it if it has ever been deployed."
+  positive_examples:
+    - "const supabase = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!)"
+  negative_examples:
+    - "const supabase = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)"
+- id: public-env-prefix-on-secret
+  category: secrets
+  severity_hint: critical
+  confidence_hint: high
+  cwe: "CWE-200, CWE-798"
+  owasp: "A02:2025"
+  asvs: "V14.3.3, V13.3.1"
+  globs:
+    - "**/*"
+  regex_patterns:
+    - "\b(?:NEXT_PUBLIC|VITE|REACT_APP|EXPO_PUBLIC|NUXT_PUBLIC|PUBLIC|GATSBY|VUE_APP|SVELTEKIT_PUBLIC)_[A-Z0-9_]*(?:SECRET|SERVICE_ROLE|SERVICE_KEY|PRIVATE|PASSWORD|API_KEY|APIKEY|ACCESS_TOKEN|AUTH_TOKEN|SIGNING|WEBHOOK)"
+  exclude_patterns:
+    - "publishable"
+    - "anon_key"
+    - "firebase"
+    - "maps_api_key"
+    - "google_maps"
+    - "recaptcha"
+    - "turnstile"
+    - "posthog"
+    - "site_key"
+    - "client_id"
+    - "mapbox"
+    - "sentry_dsn"
+    - "algolia_search"
+    - "stripe_public"
+  reason: "A secret-named variable carries a public bundler prefix (NEXT_PUBLIC_, VITE_, REACT_APP_, EXPO_PUBLIC_), so the build inlines it into client JavaScript that anyone can read."
+  review_prompt: "Confirm the variable is a real secret; drop the public prefix, move the call that needs it to a server route, and rotate the value."
+  positive_examples:
+    - "NEXT_PUBLIC_OPENAI_API_KEY=sk-notreal"
+    - "const key = import.meta.env.VITE_STRIPE_SECRET_KEY"
+  negative_examples:
+    - "NEXT_PUBLIC_SUPABASE_ANON_KEY=public-by-design"
+    - "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_notreal"
+- id: llm-sdk-in-browser
+  category: secrets
+  severity_hint: critical
+  confidence_hint: high
+  cwe: "CWE-798, CWE-200"
+  owasp: "A02:2025, LLM02:2025"
+  asvs: "V14.3.3, V13.3.1"
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.vue"
+    - "**/*.svelte"
+    - "**/*.html"
+  patterns:
+    - "dangerouslyAllowBrowser: true"
+    - "dangerouslyAllowBrowser:true"
+    - "dangerously_allow_browser"
+  reason: "The OpenAI or Anthropic SDK is configured to run in the browser (dangerouslyAllowBrowser), which only works by shipping the provider API key to every visitor; the vendors document this flag as unsafe for production."
+  review_prompt: "Move model calls behind a server route or edge function that holds the key; rotate the key and cap spend on the provider dashboard."
+  positive_examples:
+    - "const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });"
+  negative_examples:
+    - "const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });"
+- id: llm-client-near-public-env
+  category: secrets
+  severity_hint: high
+  confidence_hint: medium
+  cwe: "CWE-798, CWE-200"
+  owasp: "A02:2025, LLM02:2025"
+  asvs: "V14.3.3"
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.vue"
+    - "**/*.svelte"
+  patterns:
+    - "new OpenAI("
+    - "new Anthropic("
+    - "createOpenAI("
+    - "createAnthropic("
+    - "new GoogleGenerativeAI("
+    - "new Groq("
+    - "new Mistral("
+  nearby_terms:
+    - "NEXT_PUBLIC_"
+    - "VITE_"
+    - "REACT_APP_"
+    - "EXPO_PUBLIC_"
+    - "import.meta.env"
+    - "\"use client\""
+    - "'use client'"
+    - "window."
+    - "localStorage"
+    - "useState("
+    - "useEffect("
+  reason: "A model-provider client is constructed in code that looks browser-bound (public env prefix, use client directive, DOM APIs), which exposes the API key."
+  review_prompt: "Confirm the bundle target; keep provider clients server-side and expose a narrow authenticated route to the UI."
+  positive_examples:
+    - "const openai = new OpenAI({ apiKey: process.env.NEXT_PUBLIC_OPENAI_KEY });"
+  negative_examples:
+    - "const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });"
+- id: firebase-rules-open
+  category: authz
+  severity_hint: critical
+  confidence_hint: high
+  cwe: "CWE-284, CWE-862"
+  owasp: "A01:2025"
+  asvs: "V8.2.2, V8.3.1"
+  globs:
+    - "**/*.rules"
+    - "**/firestore.rules"
+    - "**/storage.rules"
+    - "**/database.rules.json"
+    - "**/*.rules.json"
+    - "**/firebase.json"
+  patterns:
+    - "allow read, write: if true"
+    - "allow read, write;"
+    - "allow write: if true"
+    - "allow read: if true"
+    - "allow create, update, delete: if true"
+    - "\".read\": true"
+    - "\".write\": true"
+    - "\".read\": \"true\""
+    - "\".write\": \"true\""
+  reason: "Firebase or Firestore security rules grant unauthenticated read or write to the matched path; this is the configuration behind the Tea app image exposure."
+  review_prompt: "Scope every rule to request.auth.uid and resource ownership; test with the Firebase emulator rules unit tests before deploying."
+  positive_examples:
+    - "allow read, write: if true;"
+    - "\".read\": true,"
+  negative_examples:
+    - "allow read, write: if request.auth != null && request.auth.uid == userId;"
+- id: firebase-rules-any-authenticated-user
+  category: authz
+  severity_hint: high
+  confidence_hint: medium
+  cwe: "CWE-862, CWE-639"
+  owasp: "A01:2025"
+  asvs: "V8.2.2"
+  globs:
+    - "**/*.rules"
+    - "**/firestore.rules"
+    - "**/storage.rules"
+    - "**/database.rules.json"
+    - "**/*.rules.json"
+  patterns:
+    - "allow read, write: if request.auth != null;"
+    - "allow write: if request.auth != null;"
+    - "allow read: if request.auth != null;"
+    - "\".read\": \"auth != null\""
+    - "\".write\": \"auth != null\""
+  reason: "Rules allow any signed-in account to read or write the whole path; with open sign-up, every user can read every other user's data."
+  review_prompt: "Bind access to request.auth.uid and the document's owner or membership fields; add rules unit tests for cross-user access."
+  positive_examples:
+    - "allow read, write: if request.auth != null;"
+  negative_examples:
+    - "allow read: if request.auth != null && request.auth.uid == resource.data.owner;"
+- id: env-file-with-secret-values
+  category: secrets
+  severity_hint: high
+  confidence_hint: medium
+  cwe: "CWE-312"
+  owasp: "A02:2025"
+  asvs: "V13.3.1"
+  globs:
+    - "**/.env"
+    - "**/.env.local"
+    - "**/.env.production"
+    - "**/.env.development"
+    - "**/.env.staging"
+  regex_patterns:
+    - "^[A-Z][A-Z0-9_]*(?:KEY|SECRET|TOKEN|PASSWORD|PASS|PWD|DSN|CREDENTIALS)\s*=\s*\S{8,}"
+  exclude_patterns:
+    - "=your"
+    - "=<"
+    - "=xxx"
+    - "=changeme"
+    - "example"
+    - "placeholder"
+    - "=${"
+  reason: "A .env file in the working tree carries secret-named values; if it is tracked by git or ever was, the values are exposed to everyone with repository access."
+  review_prompt: "Run git ls-files and the history scan for this file; add it to .gitignore, rotate any committed value, and keep only .env.example in the repo."
+  positive_examples:
+    - "OPENAI_API_KEY=sk-notreal-1234567890"
+  negative_examples:
+    - "OPENAI_API_KEY=your-key-here"
+    - "NODE_ENV=production"
+- id: webhook-body-trusted-without-signature
+  category: authn
+  severity_hint: high
+  confidence_hint: medium
+  cwe: "CWE-345"
+  owasp: "A07:2025"
+  asvs: "V4.1.5, V2.2.2"
+  globs:
+    - "**/webhook*"
+    - "**/webhooks/**/*"
+    - "**/*webhook*"
+    - "**/*stripe*"
+  patterns:
+    - "req.body"
+    - "request.body"
+    - "await req.json()"
+    - "await request.json()"
+    - "request.get_json("
+    - "json.loads(request.data"
+    - "json.loads(request.body"
+    - "json.loads(await request.body"
+  nearby_excludes:
+    - "constructevent"
+    - "verifyheader"
+    - "svix"
+    - "verifysignature"
+    - "verify_signature"
+    - "hmac"
+    - "createhmac"
+    - "timingsafeequal"
+    - "compare_digest"
+    - "webhooks.verify"
+    - "x-hub-signature"
+    - "stripe-signature"
+    - "signature"
+  reason: "A webhook handler parses the request body with no signature verification nearby, so anyone can forge payment, subscription, or sync events."
+  review_prompt: "Verify the provider signature over the raw body (Stripe constructEvent, Svix, HMAC with compare_digest) before acting on any field."
+  positive_examples:
+    - "const event = await req.json(); if (event.type === 'checkout.session.completed') grantAccess(event);"
+  negative_examples:
+    - "const event = stripe.webhooks.constructEvent(rawBody, sig, secret); // req.body is unused"
+- id: auth-middleware-public-wildcard
+  category: authz
+  severity_hint: high
+  confidence_hint: medium
+  cwe: "CWE-862"
+  owasp: "A01:2025"
+  asvs: "V8.2.1"
+  globs:
+    - "**/middleware.ts"
+    - "**/middleware.js"
+    - "**/proxy.ts"
+    - "**/proxy.js"
+    - "**/auth.config.*"
+  patterns:
+    - "\"/(.*)\""
+    - "'/(.*)'"
+    - "\"(.*)\""
+    - "'(.*)'"
+    - "\"/:path*\""
+    - "'/:path*'"
+  same_line_terms:
+    - "public"
+    - "ignored"
+    - "routematcher"
+    - "publicroutes"
+    - "unprotected"
+  reason: "The auth middleware marks every route as public, so pages and API routes under it run with no authentication."
+  review_prompt: "List public routes explicitly; protect everything else by default and verify API routes enforce auth independently of middleware."
+  positive_examples:
+    - "const isPublicRoute = createRouteMatcher([\"/(.*)\"]);"
+  negative_examples:
+    - "const isPublicRoute = createRouteMatcher([\"/\", \"/sign-in(.*)\", \"/pricing\"]);"
+- id: convex-function-without-auth-check
+  category: authz
+  severity_hint: medium
+  confidence_hint: low
+  cwe: "CWE-862"
+  owasp: "A01:2025"
+  asvs: "V8.2.1, V8.2.2"
+  globs:
+    - "**/convex/**/*.ts"
+    - "**/convex/**/*.js"
+  patterns:
+    - "mutation({"
+    - "query({"
+    - "action({"
+  exclude_patterns:
+    - "internal"
+  nearby_excludes:
+    - "ctx.auth"
+    - "getuseridentity"
+    - "requireauth"
+    - "getauthuser"
+  reason: "A public Convex function has no identity check in its opening lines; every client holding the deployment URL can call it."
+  review_prompt: "Call ctx.auth.getUserIdentity() and reject unauthenticated or unauthorized callers before reading or writing documents."
+  positive_examples:
+    - "export const deleteAll = mutation({ args: {}, handler: async (ctx) => { for (const doc of await ctx.db.query(\"posts\").collect()) await ctx.db.delete(doc._id); } });"
+  negative_examples:
+    - "export const deleteAll = mutation({ args: {}, handler: async (ctx) => { const identity = await ctx.auth.getUserIdentity(); if (!identity) throw new Error(\"unauthorized\"); } });"
+    - "export const sweep = internalMutation({ args: {}, handler: async (ctx) => {} });"
+- id: trpc-public-procedure-mutation
+  category: authz
+  severity_hint: medium
+  confidence_hint: medium
+  cwe: "CWE-862"
+  owasp: "A01:2025"
+  asvs: "V8.2.1"
+  globs:
+    - "**/*.ts"
+  patterns:
+    - "publicProcedure"
+  nearby_terms:
+    - ".mutation("
+    - "delete"
+    - "update"
+    - "create"
+    - "admin"
+  nearby_excludes:
+    - "ctx.session"
+    - "ctx.user"
+    - "ctx.auth"
+    - "protectedprocedure"
+  reason: "A tRPC public procedure performs a mutation without a session check in the surrounding lines."
+  review_prompt: "Use a protected procedure with session middleware, then authorize the object inside the resolver."
+  positive_examples:
+    - "deletePost: publicProcedure.input(z.string()).mutation(({ input }) => db.post.delete({ where: { id: input } })),"
+  negative_examples:
+    - "deletePost: protectedProcedure.input(z.string()).mutation(({ ctx, input }) => authorizeAndDelete(ctx.session.user, input)),"
+- id: token-in-browser-storage
+  category: authn
+  severity_hint: medium
+  confidence_hint: medium
+  cwe: "CWE-522"
+  owasp: "A07:2025"
+  asvs: "V14.3.3"
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.vue"
+    - "**/*.svelte"
+  patterns:
+    - "localStorage.setItem("
+    - "sessionStorage.setItem("
+  same_line_terms:
+    - "token"
+    - "jwt"
+    - "session"
+    - "auth"
+    - "refresh"
+    - "api_key"
+    - "apikey"
+    - "secret"
+  exclude_patterns:
+    - "theme"
+    - "csrf"
+    - "preference"
+  reason: "An authentication token or API key is stored in web storage, where any injected script can read it; the vendor guidance for session tokens is HttpOnly cookies."
+  review_prompt: "Keep session tokens in HttpOnly, Secure cookies or memory; never persist provider API keys in the browser."
+  positive_examples:
+    - "localStorage.setItem(\"access_token\", data.token);"
+  negative_examples:
+    - "localStorage.setItem(\"theme\", \"dark\");"

@@ -1,7 +1,15 @@
+# VibeSecurity LLM and agent boundary matchers.
+# Restricted YAML subset; see high-signal.yaml for field semantics.
+# OWASP ids: LLMnn:2025 from the LLM Top 10 2025, ASInn:2026 from the Agentic Top 10 2026.
+# CWE-1427 is Improper Neutralization of Input Used for LLM Prompting (CWE 4.16+).
+
 - id: ai-output-to-shell
   category: ai-agentic
   severity_hint: high
   confidence_hint: medium
+  cwe: "CWE-78, CWE-1427"
+  owasp: "LLM05:2025, ASI05:2026"
+  asvs: "V1.2.5, V2.2.2"
   globs:
     - "**/*.ts"
     - "**/*.tsx"
@@ -16,7 +24,8 @@
   patterns:
     - "subprocess."
     - "os.system("
-    - "exec("
+    - "os.popen("
+    - "execSync("
     - "spawn("
     - "child_process"
     - "exec.Command("
@@ -24,19 +33,68 @@
     - "ProcessBuilder"
     - "shell_exec("
     - "Command::new("
+    - "shell=True"
   nearby_terms:
     - "openai"
     - "anthropic"
+    - "gemini"
     - "model"
     - "completion"
     - "tool"
     - "agent"
-  reason: "Potential model or user-controlled input to command execution."
-  review_prompt: "Confirm whether model output can influence command execution; prefer allowlists and human approval."
+    - "prompt"
+    - "llm"
+    - "assistant"
+    - "generate"
+    - "output_text"
+    - "choices[0]"
+  reason: "Model or tool-call output appears to reach a process-execution sink."
+  review_prompt: "Confirm whether model output can influence the executable, arguments, or shell string; use an allowlist of actions and human approval for destructive commands."
+  positive_examples:
+    - "subprocess.run(model_output, shell=True)"
+    - "execSync(completion.choices[0].message.content)"
+  negative_examples:
+    - "subprocess.run([\"git\", \"status\"], check=True)"
+- id: model-generated-code-execution
+  category: ai-agentic
+  severity_hint: critical
+  confidence_hint: medium
+  cwe: "CWE-94, CWE-95"
+  owasp: "LLM05:2025, ASI05:2026"
+  asvs: "V1.3.2"
+  globs:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.py"
+  regex_patterns:
+    - "(?<![\w.])(?:exec|eval)\("
+    - "(?i)vm\.runInNewContext\(|new\s+Function\(|python_repl|PythonREPL|run_python\("
+  nearby_terms:
+    - "completion"
+    - "choices[0]"
+    - "output_text"
+    - "generated"
+    - "code_block"
+    - "llm"
+    - "model"
+    - "assistant"
+    - "response.content"
+    - "message.content"
+    - "tool_call"
+  reason: "Model-generated code appears to execute in the application process, giving a prompt-injected model arbitrary code execution."
+  review_prompt: "Run generated code only inside an isolated sandbox with no credentials, bounded resources, and an explicit allowlist of capabilities."
+  positive_examples:
+    - "exec(generated_code)  # run the llm output"
+  negative_examples:
+    - "const match = pattern.exec(line); // regex"
 - id: prompt-with-privileged-tools
   category: ai-agentic
   severity_hint: high
   confidence_hint: medium
+  cwe: "CWE-250"
+  owasp: "LLM06:2025, ASI02:2026"
+  asvs: "V8.3.1, V8.3.3"
   globs:
     - "**/*.ts"
     - "**/*.tsx"
@@ -49,6 +107,7 @@
     - "**/*.php"
   patterns:
     - "tools:"
+    - "tools=["
     - "tool_calls"
     - "function_call"
     - "runTools("
@@ -56,75 +115,132 @@
     - "tool_choice"
     - "execute_tool"
     - "invokeTool"
+    - "generateText("
+    - "streamText("
+    - "@tool"
   nearby_terms:
     - "delete"
     - "deploy"
     - "payment"
+    - "refund"
     - "shell"
     - "filesystem"
     - "browser"
-  reason: "Potential excessive agency or missing approval boundary for privileged tools."
-  review_prompt: "Review tool scope, authorization, tenant context, approval boundaries, and audit logging."
+    - "send_email"
+    - "sendemail"
+    - "transfer"
+    - "write_file"
+    - "writefile"
+    - "sql"
+    - "admin"
+  nearby_excludes:
+    - "requireapproval"
+    - "require_approval"
+    - "human_in_the_loop"
+    - "humanapproval"
+    - "confirm("
+  reason: "A model can call tools with destructive, financial, messaging, or filesystem effects, with no approval boundary visible nearby."
+  review_prompt: "Review tool scope, per-user authorization inside each tool, tenant context, approval gates for consequential actions, and audit logging."
+  positive_examples:
+    - "tools: [deleteUser, sendEmail, deploy]"
+  negative_examples:
+    - "tools: [searchDocs, getWeather]"
 - id: retrieved-content-as-instructions
   category: ai-agentic
   severity_hint: medium
-  confidence_hint: medium
+  confidence_hint: low
+  cwe: "CWE-1427"
+  owasp: "LLM01:2025, ASI01:2026"
+  asvs: "V2.2.2"
   globs:
     - "**/*.ts"
     - "**/*.tsx"
     - "**/*.js"
     - "**/*.py"
-    - "**/*.go"
-    - "**/*.rb"
-    - "**/*.java"
-    - "**/*.cs"
-    - "**/*.php"
   patterns:
-    - "retriever"
-    - "vector"
-    - "documents"
-    - "context"
-    - "rag"
-  nearby_terms:
-    - "system"
-    - "instructions"
-    - "follow"
-    - "tools"
-  reason: "Potential indirect prompt injection if retrieved content is treated as instructions."
-  review_prompt: "Check whether retrieved content is quoted as untrusted data and whether tools remain constrained."
+    - "role: \"system\""
+    - "role: 'system'"
+    - "\"role\": \"system\""
+    - "system:"
+    - "system ="
+    - "system="
+    - "system_prompt"
+    - "systemPrompt"
+    - "SystemMessage("
+  same_line_terms:
+    - "${docs"
+    - "${context"
+    - "${retrieved"
+    - "${results"
+    - "${chunks"
+    - "${page"
+    - "${email"
+    - "${tool"
+    - "+ docs"
+    - "+ context"
+    - "+ retrieved"
+    - "{context}"
+    - "{docs}"
+    - "{retrieved"
+    - "{chunks}"
+    - ".join(docs"
+    - ".join(results"
+    - ".join(chunks"
+    - "f\"...{"
+  reason: "Retrieved documents, tool results, or web content are spliced into the system prompt, where the model treats them as instructions rather than data."
+  review_prompt: "Place untrusted content in a clearly delimited user or tool message, state that it is data, and keep tools constrained regardless of what the content says."
+  positive_examples:
+    - "const system = `You are a helpful bot. Follow the docs: ${docs.join(\"\\n\")}`"
+  negative_examples:
+    - "messages: [{ role: \"system\", content: SYSTEM_PROMPT }]"
 - id: model-output-to-browser-or-file
   category: ai-agentic
   severity_hint: high
   confidence_hint: medium
+  cwe: "CWE-79, CWE-73"
+  owasp: "LLM05:2025, ASI05:2026"
+  asvs: "V1.2.1, V5.3.2"
   globs:
     - "**/*.ts"
     - "**/*.tsx"
     - "**/*.js"
     - "**/*.py"
-    - "**/*.go"
-    - "**/*.rb"
-    - "**/*.java"
-    - "**/*.cs"
-    - "**/*.php"
   patterns:
-    - "writeFile"
-    - "open("
+    - "writeFile("
+    - "writeFileSync("
     - "innerHTML"
     - "dangerouslySetInnerHTML"
-    - "browser"
-    - "page."
-  nearby_terms:
-    - "model"
+    - "page.goto("
+    - "page.evaluate("
+    - "page.click("
+    - "page.fill("
+    - "open("
+  same_line_terms:
     - "completion"
-    - "assistant"
+    - "choices[0]"
+    - "output_text"
+    - "generated"
     - "llm"
-    - "tool"
-  reason: "Potential model output used as browser instruction, HTML, or filesystem input."
-  review_prompt: "Confirm structured validation, allowlisted paths/actions, and approval gates before model output reaches the sink."
-- id: agent-cost-or-resource-boundary
+    - "model_output"
+    - "modeloutput"
+    - "ai_response"
+    - "airesponse"
+    - "answer"
+    - "assistant"
+    - "response.text"
+  reason: "Model output appears to be written to disk, rendered as HTML, or used to drive a browser without validation."
+  review_prompt: "Validate model output against a schema, allowlist paths and actions, sanitize for the exact HTML context, and gate browser navigation."
+  positive_examples:
+    - "fs.writeFileSync(answer.path, answer.content) // llm decided the file"
+  negative_examples:
+    - "fs.writeFileSync(path.join(outDir, \"report.json\"), JSON.stringify(report))"
+- id: agent-loop-without-iteration-bound
   category: availability
   severity_hint: medium
   confidence_hint: medium
+  cwe: "CWE-770"
+  owasp: "LLM10:2025, ASI08:2026"
+  asvs: "V2.4.1, V15.2.2"
   globs:
     - "**/*.ts"
     - "**/*.tsx"
@@ -135,23 +251,44 @@
     - "**/*.java"
     - "**/*.cs"
   patterns:
-    - "max_tokens"
     - "while True"
-    - "for await"
-    - "stream"
-    - "retry"
+    - "while (true)"
+    - "while(true)"
+    - "for (;;)"
+    - "while 1:"
   nearby_terms:
-    - "openai"
-    - "anthropic"
+    - "tool_call"
+    - "tool_calls"
     - "agent"
     - "completion"
-    - "tool"
-  reason: "Potential denial-of-wallet or runaway agent resource path."
-  review_prompt: "Check quotas, timeouts, input limits, retry bounds, cancellation, and user/tenant cost attribution."
+    - "messages.append"
+    - "messages.push"
+    - "llm"
+    - "model"
+    - "generate("
+  nearby_excludes:
+    - "max_iterations"
+    - "maxiterations"
+    - "max_steps"
+    - "maxsteps"
+    - "max_turns"
+    - "maxturns"
+    - "budget"
+    - "deadline"
+    - "timeout"
+  reason: "An agent loop keeps calling the model with no visible iteration, token, time, or cost bound, so a stuck or hijacked agent spends until the account is drained."
+  review_prompt: "Add iteration, token, wall-clock, and spend budgets with cancellation; attribute cost per user or tenant."
+  positive_examples:
+    - "while True:  # agent loop: completion -> tool_calls -> messages.append"
+  negative_examples:
+    - "for step in range(MAX_STEPS):  # agent loop with max_steps"
 - id: agent-memory-write-boundary
   category: ai-agentic
   severity_hint: high
   confidence_hint: medium
+  cwe: "CWE-345"
+  owasp: "ASI06:2026, LLM08:2025"
+  asvs: "V8.2.2, V2.2.2"
   globs:
     - "**/*.ts"
     - "**/*.tsx"
@@ -164,21 +301,46 @@
   patterns:
     - "memory.add("
     - "memory.save("
+    - "memory.write("
+    - "addMemory("
     - "vectorstore.add"
     - "add_documents("
+    - "add_texts("
     - "upsert("
+    - "index.upsert("
+    - "remember("
+    - "store.put("
   nearby_terms:
     - "agent"
     - "user"
     - "retriev"
     - "instruction"
     - "tool"
-  reason: "Untrusted content may persist into agent memory or shared retrieval state."
-  review_prompt: "Check write authorization, provenance, tenant isolation, expiry, poisoning resistance, and whether stored content can later control tools."
+    - "conversation"
+    - "message"
+    - "scrape"
+    - "web"
+    - "email"
+  nearby_excludes:
+    - "tenant_id"
+    - "tenantid"
+    - "namespace="
+    - "namespace:"
+    - "user_id"
+    - "userid"
+  reason: "Untrusted content may persist into agent memory or shared retrieval state without tenant scoping, where it can later steer the agent."
+  review_prompt: "Check write authorization, provenance, tenant isolation, expiry, and whether stored content can later be treated as instructions."
+  positive_examples:
+    - "await vectorstore.add_documents(scraped_pages)  # agent memory"
+  negative_examples:
+    - "await index.upsert(vectors, namespace=tenant_id)  # agent memory"
 - id: dynamic-agent-extension
   category: ai-agentic
   severity_hint: high
   confidence_hint: medium
+  cwe: "CWE-829"
+  owasp: "ASI04:2026, LLM03:2025"
+  asvs: "V15.2.4, V15.2.5"
   globs:
     - "**/*.ts"
     - "**/*.tsx"
@@ -188,13 +350,19 @@
     - "**/*.rb"
     - "**/*.java"
     - "**/*.cs"
+    - "**/*.json"
+    - "**/*.yaml"
+    - "**/*.yml"
   patterns:
     - "load_tool("
     - "registerTool("
     - "mcpServers"
+    - "mcp_servers"
     - "mcp_server"
     - "agent_card"
     - "a2a"
+    - "npx -y"
+    - "uvx "
   nearby_terms:
     - "url"
     - "remote"
@@ -202,12 +370,23 @@
     - "install"
     - "config"
     - "registry"
-  reason: "Runtime-discovered tools, agents, or MCP/A2A components may cross an unverified supply-chain boundary."
-  review_prompt: "Verify origin, integrity, identity, capabilities, transport, user consent, and revocation before loading or invoking the component."
+    - "command"
+    - "args"
+    - "http"
+    - "@latest"
+  reason: "Runtime-discovered tools, agents, or MCP servers are loaded from a mutable or remote source, crossing an unverified supply-chain boundary."
+  review_prompt: "Verify origin, integrity, version pinning, identity, capabilities, transport, user consent, and revocation before loading or invoking the component."
+  positive_examples:
+    - "\"mcpServers\": { \"db\": { \"command\": \"npx\", \"args\": [\"-y\", \"some-mcp@latest\"] } }"
+  negative_examples:
+    - "const tools = [searchTool, calculatorTool]; // registry of local tools"
 - id: agent-delegated-identity
   category: ai-agentic
   severity_hint: high
   confidence_hint: medium
+  cwe: "CWE-250"
+  owasp: "ASI03:2026, LLM06:2025"
+  asvs: "V8.3.3, V13.2.2"
   globs:
     - "**/*.ts"
     - "**/*.tsx"
@@ -218,23 +397,35 @@
     - "**/*.java"
     - "**/*.cs"
   patterns:
-    - "access_token"
     - "service_account"
+    - "serviceaccount"
     - "delegated_credentials"
-    - "oauth_token"
     - "impersonate"
-  nearby_terms:
+    - "service_role"
+    - "admin_token"
+    - "master_key"
+    - "root_token"
+  same_line_terms:
     - "agent"
     - "tool"
-    - "delegate"
-    - "tenant"
-    - "user"
-  reason: "An agent may hold or delegate identity with broader privileges or lifetime than the active user and task."
-  review_prompt: "Bind credentials to the user, tenant, task, audience, scope, and short lifetime; prevent confused-deputy and replay paths."
+    - "assistant"
+    - "llm"
+    - "mcp"
+    - "copilot"
+    - "bot"
+  reason: "An agent or tool runs with a service, admin, or impersonation identity whose privileges exceed the requesting user and task."
+  review_prompt: "Bind credentials to the user, tenant, task, audience, scope, and a short lifetime; prevent confused-deputy and replay paths."
+  positive_examples:
+    - "const agentClient = createClient(url, service_role_key)  // agent tool"
+  negative_examples:
+    - "const client = createClient(url, anonKey)"
 - id: secret-into-model-payload
   category: secrets
   severity_hint: high
   confidence_hint: medium
+  cwe: "CWE-200"
+  owasp: "LLM02:2025"
+  asvs: "V14.2.3, V13.3.2"
   globs:
     - "**/*.ts"
     - "**/*.tsx"
@@ -243,25 +434,52 @@
   patterns:
     - "prompt"
     - "messages"
-    - "input"
-    - "content"
-  nearby_terms:
-    - "token"
-    - "secret"
-    - "password"
-    - "api_key"
+    - "content:"
+    - "input:"
+    - "system:"
+  same_line_terms:
+    - "api_key +"
+    - "apikey +"
+    - "${api_key"
+    - "${apikey"
+    - "{api_key}"
+    - "secret +"
+    - "${secret"
+    - "{secret}"
+    - "password +"
+    - "${password"
+    - "{password}"
+    - "access_token +"
+    - "${access_token"
+    - "{access_token}"
+    - "${token"
+    - "{token}"
+    - "+ token"
+    - "private_key"
     - "credential"
-  reason: "Secret-named values may be assembled into a model payload and leave the trust boundary."
+    - "process.env"
+    - "os.environ"
+  exclude_patterns:
+    - "max_tokens"
+    - "tokens:"
+    - "apikey: process.env"
+    - "api_key=os.environ"
+    - "api_key = os.environ"
+  reason: "Secret-named values are assembled into a model payload and leave the trust boundary toward the provider and its logs."
   review_prompt: "Trace the assembled payload; strip or substitute credentials before any model API call, and keep prompts out of logs."
   positive_examples:
-    - "messages: [{ role: user, content: api_key + query }]"
+    - "messages: [{ role: \"user\", content: api_key + query }]"
     - "const prompt = `use token ${token}: ${question}`"
   negative_examples:
-    - "messages: [{ role: user, content: question }]"
+    - "messages: [{ role: \"user\", content: question }]"
+    - "const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); // prompt helper"
 - id: agent-memory-writes-secret
   category: secrets
   severity_hint: medium
   confidence_hint: medium
+  cwe: "CWE-522"
+  owasp: "LLM02:2025, ASI06:2026"
+  asvs: "V13.3.2"
   globs:
     - "**/*.ts"
     - "**/*.js"
@@ -269,7 +487,8 @@
   patterns:
     - "memory.save"
     - "memory.write"
-    - "store(" 
+    - "memory.add"
+    - "store("
     - "remember("
   nearby_terms:
     - "token"
@@ -286,6 +505,9 @@
   category: secrets
   severity_hint: medium
   confidence_hint: low
+  cwe: "CWE-522"
+  owasp: "LLM02:2025, ASI03:2026"
+  asvs: "V13.3.2"
   globs:
     - "**/*.ts"
     - "**/*.js"
@@ -301,7 +523,7 @@
     - "secret"
     - "password"
     - "api_key"
-  reason: "Tool-call arguments may embed credential values readable by tool providers or logs."
+  reason: "Tool-call arguments may embed credential values readable by the model, tool providers, or traces."
   review_prompt: "Pass credentials through scoped runtime injection, never through model-controlled tool arguments."
   positive_examples:
     - "tool_call(name='deploy', arguments={'api_key': token})"

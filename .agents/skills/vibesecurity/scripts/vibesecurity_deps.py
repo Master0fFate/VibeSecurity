@@ -310,7 +310,7 @@ PARSERS = {
 }
 
 
-def _walk_skip_parts() -> set[str]:
+def walk_skip_parts() -> set[str]:
     return {
         ".git", "node_modules", ".venv", "venv", "vendor", "target",
         "__pycache__", ".vibesecurity", "dist", "build", ".codegraph", ".omo",
@@ -320,7 +320,7 @@ def _walk_skip_parts() -> set[str]:
 def _is_link(path: Path) -> bool:
     if path.is_symlink():
         return True
-    junction = getattr(__import__("os").path, "isjunction", None)
+    junction = getattr(os.path, "isjunction", None)
     return bool(junction and junction(str(path)))
 
 
@@ -330,7 +330,7 @@ def deps_payload(root: Path) -> JsonMap:
     warnings: list[str] = []
     unsupported: list[JsonMap] = []
     seen_files: set[str] = set()
-    skip_parts = _walk_skip_parts()
+    skip_parts = walk_skip_parts()
     for dirpath, dirnames, filenames in os.walk(root):
         kept: list[str] = []
         for dirname in dirnames:

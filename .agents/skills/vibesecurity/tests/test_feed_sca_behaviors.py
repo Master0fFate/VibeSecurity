@@ -39,6 +39,40 @@ KEV_CATALOG = {
     "vulns": [{"cveID": "CVE-2024-99999", "knownRansomwareCampaignUse": "Unknown"}],
 }
 
+EPSS_RESPONSE = {
+    "status": "OK",
+    "data": [{"cve": "CVE-2024-99999", "epss": "0.734000000", "percentile": "0.981000000", "date": "2026-10-13"}],
+}
+
+NPM_RECORD = {
+    "name": "express",
+    "time": {"created": "2010-12-29T19:38:25.450Z", "modified": "2026-01-01T00:00:00.000Z", "1.1.0": "2011-01-01T00:00:00.000Z"},
+    "dist-tags": {"latest": "1.1.0"},
+}
+
+
+def _patch_urls(base: str) -> dict[str, str]:
+    original = {
+        "OSV_QUERY_BATCH_URL": feed.OSV_QUERY_BATCH_URL,
+        "OSV_VULN_URL": feed.OSV_VULN_URL,
+        "KEV_URL": feed.KEV_URL,
+        "EPSS_URL": feed.EPSS_URL,
+        "NPM_REGISTRY_URL": feed.NPM_REGISTRY_URL,
+        "PYPI_JSON_URL": feed.PYPI_JSON_URL,
+    }
+    feed.OSV_QUERY_BATCH_URL = base + "/v1/querybatch"
+    feed.OSV_VULN_URL = base + "/v1/vulns/"
+    feed.KEV_URL = base + "/feeds/known_exploited_vulnerabilities.json"
+    feed.EPSS_URL = base + "/epss"
+    feed.NPM_REGISTRY_URL = base + "/npm/"
+    feed.PYPI_JSON_URL = base + "/pypi/"
+    return original
+
+
+def _restore_urls(original: dict[str, str]) -> None:
+    for key, value in original.items():
+        setattr(feed, key, value)
+
 
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # silence
@@ -60,6 +94,10 @@ class _Handler(BaseHTTPRequestHandler):
             body = json.dumps(OSV_RECORD).encode()
         elif self.path.endswith("known_exploited_vulnerabilities.json"):
             body = json.dumps(KEV_CATALOG).encode()
+        elif self.path.startswith("/epss"):
+            body = json.dumps(EPSS_RESPONSE).encode()
+        elif self.path.startswith("/npm/express"):
+            body = json.dumps(NPM_RECORD).encode()
         else:
             self.send_error(404)
             return
@@ -93,13 +131,7 @@ def _sample_root(tmp: str) -> Path:
 
 def test_feed_refresh_stores_cache_and_sca_confirms_with_kev() -> None:
     server = _start_server()
-    base = f"http://127.0.0.1:{server.server_port}"
-    original_batch = feed.OSV_QUERY_BATCH_URL
-    original_vuln = feed.OSV_VULN_URL
-    original_kev = feed.KEV_URL
-    feed.OSV_QUERY_BATCH_URL = base + "/v1/querybatch"
-    feed.OSV_VULN_URL = base + "/v1/vulns/"
-    feed.KEV_URL = base + "/feeds/known_exploited_vulnerabilities.json"
+    original = _patch_urls(f"http://127.0.0.1:{server.server_port}")
     try:
         with tempfile.TemporaryDirectory() as tmp:
             root = _sample_root(tmp)
@@ -109,10 +141,14 @@ def test_feed_refresh_stores_cache_and_sca_confirms_with_kev() -> None:
             results = {item["source"]: item["ok"] for item in payload["results"]}
             assert results.get("osv+ghsa") is True
             assert results.get("kev") is True
+            assert results.get("epss") is True
+            assert results.get("registry") is True
             record_path = cache / "osv" / "npm" / "express.json"
             assert record_path.is_file()
             record = json.loads(record_path.read_text(encoding="utf-8"))
             assert record["vulns"][0]["id"] == "OSV-TEST-0001"
+            assert (cache / "epss" / "scores.json").is_file()
+            assert (cache / "registry" / "npm" / "express.json").is_file()
             sca = sca_payload(root, cache, 72)
             candidates = sca["candidates"]
             assert candidates, "expected an SCA candidate for express@1.1.0"
@@ -123,12 +159,13 @@ def test_feed_refresh_stores_cache_and_sca_confirms_with_kev() -> None:
             assert "CISA KEV" in item["escalation_reason"]
             assert item["advisory_fix"]["recommended_version"] == "1.2.0"
             assert "OSV-TEST-0001" in item["advisory_ids"]
+            assert item["epss"]["epss"] == 0.734
+            assert item["severity_basis"].startswith("advisory database_specific.severity")
+            assert "cisa-kev-listed" in item["priority_reasons"]
             source_types = {source["type"] for source in item["sources"]}
             assert {"OSV", "CVE", "GHSA"} <= source_types
     finally:
-        feed.OSV_QUERY_BATCH_URL = original_batch
-        feed.OSV_VULN_URL = original_vuln
-        feed.KEV_URL = original_kev
+        _restore_urls(original)
         server.shutdown()
 
 
@@ -159,13 +196,7 @@ def test_stale_cache_downgrades_sca_to_needs_review() -> None:
 
 def test_bundle_export_import_and_tamper_detection() -> None:
     server = _start_server()
-    base = f"http://127.0.0.1:{server.server_port}"
-    original_batch = feed.OSV_QUERY_BATCH_URL
-    original_vuln = feed.OSV_VULN_URL
-    original_kev = feed.KEV_URL
-    feed.OSV_QUERY_BATCH_URL = base + "/v1/querybatch"
-    feed.OSV_VULN_URL = base + "/v1/vulns/"
-    feed.KEV_URL = base + "/feeds/known_exploited_vulnerabilities.json"
+    original = _patch_urls(f"http://127.0.0.1:{server.server_port}")
     try:
         with tempfile.TemporaryDirectory() as tmp:
             root = _sample_root(tmp)
@@ -187,9 +218,7 @@ def test_bundle_export_import_and_tamper_detection() -> None:
             else:
                 raise AssertionError("tampered bundle passed integrity check")
     finally:
-        feed.OSV_QUERY_BATCH_URL = original_batch
-        feed.OSV_VULN_URL = original_vuln
-        feed.KEV_URL = original_kev
+        _restore_urls(original)
         server.shutdown()
 
 
@@ -206,7 +235,6 @@ def test_version_comparison_subset() -> None:
 
 
 def test_fixed_versions_come_only_from_advisory_events() -> None:
-    affected = OSV_RECORD["affected"][0]
     deps = [{"ecosystem": "npm", "name": "express", "version": "1.1.0"}]
     record = {"schema": "vibesecurity-osv-record/1", "vulns": [OSV_RECORD]}
     candidates, _ = sca_candidates(deps, {"osv/npm/express.json": record}, True)
@@ -214,6 +242,14 @@ def test_fixed_versions_come_only_from_advisory_events() -> None:
     fixed = set(item["fixed_versions"])
     assert fixed == {"1.2.0", "2.0.1"}
     assert item["advisory_fix"]["recommended_version"] in fixed
+    cvss_only = {**OSV_RECORD, "database_specific": {}, "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}]}
+    computed, _ = sca_candidates(deps, {"osv/npm/express.json": {"schema": "vibesecurity-osv-record/1", "vulns": [cvss_only]}}, True)
+    assert computed[0]["cvss"]["base_score"] == 9.8
+    assert computed[0]["severity_hint"] == "critical"
+    bare = {**OSV_RECORD, "database_specific": {}, "severity": []}
+    defaulted, _ = sca_candidates(deps, {"osv/npm/express.json": {"schema": "vibesecurity-osv-record/1", "vulns": [bare]}}, True)
+    assert defaulted[0]["severity_hint"] == "medium"
+    assert "no severity" in defaulted[0]["severity_basis"]
 
 
 TESTS = [

@@ -13,18 +13,24 @@ from vibesecurity_common import (
     sha256_bytes,
 )
 from vibesecurity_config import PolicyConfig
-from vibesecurity_scan import scan_payload
-from vibesecurity_sca import sca_candidates
 from vibesecurity_deps import deps_payload
-from vibesecurity_feed import BUNDLE_SCHEMA, provenance_block
+from vibesecurity_feed import BUNDLE_SCHEMA, cache_dir as default_cache_dir, provenance_block
+from vibesecurity_registry import manifest_drift_candidates, registry_candidates
+from vibesecurity_sca import sca_candidates
+from vibesecurity_scan import scan_payload
 
 FAIL_ON_LEVELS: Final = ("none", "confirmed", "confirmed-high", "critical")
+
+
+def default_advisory_source(root: Path, cache_dir: Path | None) -> Path | None:
+    directory = cache_dir if cache_dir is not None else default_cache_dir(root)
+    return directory if directory.is_dir() else None
 
 
 def resolve_advisory_records(
     source: Path | None,
 ) -> tuple[dict[str, JsonValue], list[str], JsonMap | None]:
-    """Load advisories from a cache dir or a verified bundle file (D5)."""
+    """Load advisories from a cache dir or a verified bundle file."""
     if source is None:
         return {}, [], None
     resolved = source.resolve()
@@ -70,7 +76,7 @@ def enriched_scan_payload(
     cache_dir: Path | None = None,
     baseline: Baseline | None = None,
 ) -> JsonMap:
-    """Scan = matchers + secret engine (+ SCA) (+ bridge), with baseline and gate data."""
+    """Scan = matchers + secret engine + dependency hygiene (+ SCA) (+ bridge), with baseline and gate data."""
     root = root.resolve()
     payload = scan_payload(root)
     candidates: list[JsonMap] = [
@@ -79,32 +85,41 @@ def enriched_scan_payload(
     warnings: list[str] = [
         str(item) for item in payload.get("scope", {}).get("matcher_warnings", [])
     ]
+    source = advisory_source if advisory_source is not None else default_advisory_source(root, cache_dir)
     advisory_block: JsonMap | None = None
-    records, load_warnings, bundle_provenance = resolve_advisory_records(advisory_source)
+    records, load_warnings, bundle_provenance = resolve_advisory_records(source)
     warnings.extend(load_warnings)
+    deps = deps_payload(root)
+    dependencies = deps.get("dependencies")
+    dependency_list = dependencies if isinstance(dependencies, list) else []
+    hygiene: JsonMap = {"dependencies": len(dependency_list), "registry_checked": 0}
     if records:
-        deps = deps_payload(root)
-        dependencies = deps.get("dependencies")
         if bundle_provenance is not None:
             provenance = bundle_provenance
             fresh = True
         else:
-            directory = cache_dir if cache_dir is not None else advisory_source
+            directory = cache_dir if cache_dir is not None else source
             provenance = (
                 provenance_block(directory, config.max_cache_age_hours)
                 if directory is not None
                 else {}
             )
             fresh = bool(provenance.get("fresh"))
-        sca_items, sca_warnings = sca_candidates(
-            dependencies if isinstance(dependencies, list) else [], records, fresh
-        )
+        sca_items, sca_warnings = sca_candidates(dependency_list, records, fresh)
         advisory_block = provenance
         candidates.extend(sca_items)
         warnings.extend(sca_warnings)
         for dep_warning in deps.get("warnings", [])[:20]:
             if isinstance(dep_warning, str):
                 warnings.append(dep_warning)
+        registry_items = registry_candidates(dependency_list, records)
+        hygiene["registry_checked"] = sum(1 for key in records if key.startswith("registry/"))
+        hygiene["not_in_registry"] = sum(1 for item in registry_items if item.get("matcher_id") == "dependency-not-in-public-registry")
+        hygiene["recently_published"] = sum(1 for item in registry_items if item.get("matcher_id") == "dependency-recently-published")
+        candidates.extend(registry_items)
+    drift_items = manifest_drift_candidates(root)
+    hygiene["declared_not_locked"] = len(drift_items)
+    candidates.extend(drift_items)
     if analyzers:
         from vibesecurity_bridge import bridge_payload
 
@@ -126,6 +141,7 @@ def enriched_scan_payload(
         "max_age_days": config.baseline_max_age_days,
         "warnings": list(active_baseline.warnings[:20]),
     }
+    payload["dependency_hygiene"] = hygiene
     if advisory_block is not None:
         payload["advisory_db"] = advisory_block
     scope_warnings = payload.get("scope", {})
@@ -138,7 +154,7 @@ def enriched_scan_payload(
 
 
 def gate_summary(items: list[JsonMap], fail_on: str) -> JsonMap:
-    """D1: machine-readable verdict data for CI gating."""
+    """Machine-readable verdict data for CI gating."""
     confirmed = [item for item in items if item.get("status") == "confirmed"]
     counts = {"confirmed": len(confirmed), "total": len(items)}
     for band in ("critical", "high", "medium", "low"):

@@ -6,6 +6,9 @@
   category: "secrets"
   severity_hint: "high"
   confidence_hint: "medium"
+  cwe: "CWE-532"
+  owasp: "A09:2025"
+  asvs: "V16.2.5, V13.3.2"
   globs:
     - "**/.github/workflows/*.yml"
     - "**/.github/workflows/*.yaml"
@@ -16,12 +19,13 @@
     - "printenv"
     - "env |"
     - "set -x"
+    - "env >"
   nearby_terms:
     - "SECRET"
     - "TOKEN"
     - "PASSWORD"
     - "KEY"
-  reason: "Workflow step may print secret-named values into CI logs."
+  reason: "A workflow step may print secret-named values into CI logs, where masking is bypassed by encoding or splitting."
   review_prompt: "Confirm whether masked variables can leak via echo, printenv, tracing, or encoding tricks; remove the dump and keep secrets out of logs."
   positive_examples:
     - "run: echo $AWS_SECRET_ACCESS_KEY"
@@ -33,11 +37,15 @@
   category: "secrets"
   severity_hint: "high"
   confidence_hint: "medium"
+  cwe: "CWE-312"
+  owasp: "A02:2025"
+  asvs: "V13.3.1, V13.3.2"
   globs:
     - "**/Dockerfile"
     - "**/*.Dockerfile"
     - "**/docker-compose.yml"
     - "**/docker-compose.yaml"
+    - "**/.github/workflows/*.yml"
   patterns:
     - "--build-arg "
     - "ARG "
@@ -46,10 +54,10 @@
     - "SECRET"
     - "PASSWORD"
     - "KEY"
-  reason: "Build argument may bake a secret into image layers or build history."
-  review_prompt: "Confirm whether a secret-named build argument reaches image layers; prefer runtime secrets (mounts or orchestrator secrets) over build args."
+  reason: "A build argument may bake a secret into image layers and build history, where docker history reveals it."
+  review_prompt: "Confirm whether a secret-named build argument reaches image layers; prefer --mount=type=secret or runtime injection over build args."
   positive_examples:
-    - "RUN --mount=type=secret,id=npm_token echo build # ARG NPM_TOKEN above"
+    - "ARG NPM_TOKEN"
     - "docker build --build-arg GITHUB_TOKEN=$TOKEN ."
   negative_examples:
     - "ARG VERSION=1.0"
@@ -58,9 +66,13 @@
   category: "secrets"
   severity_hint: "high"
   confidence_hint: "medium"
+  cwe: "CWE-200"
+  owasp: "A02:2025"
+  asvs: "V13.3.2"
   globs:
     - "**/.github/workflows/*.yml"
     - "**/.github/workflows/*.yaml"
+    - "**/.gitlab-ci.yml"
   patterns:
     - "actions/upload-artifact"
     - "path:"
@@ -72,7 +84,9 @@
     - ".key"
     - "secret"
     - "credential"
-  reason: "Artifact upload may publish secret-named files to anyone with job access."
+    - "id_rsa"
+    - "kubeconfig"
+  reason: "An artifact upload may publish secret-named files to anyone with job or repository read access."
   review_prompt: "Confirm whether the artifact path can include secret files; exclude them and rotate anything already uploaded."
   positive_examples:
     - "path: .env.production"
@@ -84,6 +98,9 @@
   category: "ci-cd"
   severity_hint: "high"
   confidence_hint: "medium"
+  cwe: "CWE-522"
+  owasp: "A08:2025"
+  asvs: "V13.3.2, V13.2.2"
   globs:
     - "**/.github/workflows/*.yml"
     - "**/.github/workflows/*.yaml"
@@ -92,7 +109,10 @@
   nearby_terms:
     - "pull_request"
     - "pull_request_target"
-  reason: "A pull-request-triggered job references repository secrets; fork-controlled flow may reach them."
+    - "issue_comment"
+  exclude_patterns:
+    - "secrets.github_token"
+  reason: "A pull-request-triggered job references repository secrets; fork-controlled code or event text may reach them."
   review_prompt: "Confirm whether fork pull requests can reach secret-using jobs; separate untrusted validation from secret-bearing jobs."
   positive_examples:
     - "if: github.event_name == 'pull_request' && secrets.NPM_TOKEN != ''"
@@ -102,6 +122,9 @@
   category: "secrets"
   severity_hint: "medium"
   confidence_hint: "low"
+  cwe: "CWE-522"
+  owasp: "A08:2025"
+  asvs: "V13.3.2"
   globs:
     - "**/.github/workflows/*.yml"
     - "**/.github/workflows/*.yaml"
@@ -111,9 +134,9 @@
     - "SECRET"
     - "TOKEN"
     - "PASSWORD"
-  reason: "Job-level env block may expose secret values to untrusted pull-request code."
+  reason: "A job-level env block may expose secret values to every step, including untrusted pull-request code and third-party actions."
   review_prompt: "Check which event triggers the job and whether fork code can read the env; move secrets to the steps that need them."
   positive_examples:
-    - "env:\n  DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}"
+    - "env: { DEPLOY_TOKEN: secret-value }"
   negative_examples:
-    - "env:\n  NODE_ENV: production"
+    - "env: { NODE_ENV: production }"

@@ -148,7 +148,7 @@ SKIP_PARTS: Final = {
     "pods",
     "deriveddata",
 }
-VIBESEC_VERSION: Final = "3.0.0"
+VIBESEC_VERSION: Final = "4.0.0"
 EXIT_CLEAN: Final = 0
 EXIT_FINDINGS: Final = 1
 EXIT_TOOL_ERROR: Final = 2
@@ -173,10 +173,25 @@ SECRET_ASSIGNMENT: Final = re.compile(
     rf"(?i)\b({SECRET_KEY})\b(\s*[:=]\s*)[^\s,;]+",
 )
 SECRET_TOKEN: Final = re.compile(
-    r"\b(?:sk-(?:proj-|ant-api03-)?[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
-    r"glpat-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|AKIA[0-9A-Z]{16}|"
-    r"AIza[0-9A-Za-z_-]{30,}|sk_live_[0-9A-Za-z]{16,}|npm_[A-Za-z0-9]{32,}|"
-    r"pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{32,})\b",
+    r"\b(?:sk-(?:proj-|svcacct-|admin-|ant-api03-|ant-admin01-|or-v1-)?[A-Za-z0-9_-]{16,}|"
+    r"gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
+    r"gl(?:pat|rt|dt|cbt|ptt|ft|soat|agent|oas|imt|rrt|scim|ffct)-[A-Za-z0-9_-]{16,}|"
+    r"xox[abeprs]-[A-Za-z0-9-]{10,}|xapp-\d-[A-Za-z0-9-]{10,}|"
+    r"(?:AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}|ABSK[A-Za-z0-9+/=]{100,}|LTAI[A-Za-z0-9]{20}|"
+    r"AIza[0-9A-Za-z_-]{30,}|GOCSPX-[A-Za-z0-9_-]{20,}|"
+    r"(?:sk|rk|pk)_(?:live|test|prod)_[0-9A-Za-z]{10,}|whsec_[A-Za-z0-9]{20,}|"
+    r"npm_[A-Za-z0-9]{32,}|pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{32,}|rubygems_[a-f0-9]{48}|"
+    r"sb_(?:secret|publishable)_[A-Za-z0-9_-]{16,}|sbp_[A-Za-z0-9]{30,}|"
+    r"hf_[A-Za-z0-9]{30,}|gsk_[A-Za-z0-9]{30,}|xai-[A-Za-z0-9]{30,}|pplx-[A-Za-z0-9]{30,}|r8_[A-Za-z0-9]{30,}|"
+    r"re_[A-Za-z0-9]{6,12}_[A-Za-z0-9]{16,}|lsv2_(?:pt|sk)_[A-Za-z0-9_]{20,}|tvly-[A-Za-z0-9_-]{20,}|pcsk_[A-Za-z0-9_]{20,}|"
+    r"do[por]_v1_[a-f0-9]{64}|fo1_[A-Za-z0-9_-]{40,}|fm2_[A-Za-z0-9+/=]{40,}|"
+    r"pscale_(?:tkn|pw|oauth)_[A-Za-z0-9_.=-]{20,}|lin_api_[A-Za-z0-9]{30,}|ntn_[A-Za-z0-9]{30,}|"
+    r"dp\.pt\.[A-Za-z0-9]{30,}|hv[sb]\.[A-Za-z0-9_-]{60,}|dapi[a-f0-9]{32}|"
+    r"glc_[A-Za-z0-9+/=]{30,}|glsa_[A-Za-z0-9]{32}_[A-Fa-f0-9]{8}|PMAK-[a-f0-9]{24}-[a-f0-9]{34}|pul-[a-f0-9]{40}|"
+    r"shp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}|sq0atp-[A-Za-z0-9_-]{22,}|sntry[us]_[A-Za-z0-9_+/=]{30,}|"
+    r"AGE-SECRET-KEY-1[A-Z0-9]{58}|ops_eyJ[A-Za-z0-9+/=]{100,}|HRKU-AA[A-Za-z0-9_-]{58}|tfp_[A-Za-z0-9_.=-]{40,}|"
+    r"dt0c01\.[A-Za-z0-9]{24}\.[A-Za-z0-9]{64}|xkeysib-[a-f0-9]{64}-[A-Za-z0-9]{16}|"
+    r"SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}|SK[0-9a-f]{32})\b",
 )
 JWT_TOKEN: Final = re.compile(
     r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"
@@ -227,6 +242,13 @@ class FileSelection:
         return [item.to_json() for item in self.skipped]
 
 
+FORMAT_REDACTION_PATTERNS: list[re.Pattern[str]] = []
+
+
+def register_redaction_patterns(patterns: tuple[re.Pattern[str], ...]) -> None:
+    FORMAT_REDACTION_PATTERNS[:] = list(patterns)
+
+
 def redact(text: str) -> str:
     keys = PRIVATE_KEY.sub("<redacted-private-key>", text)
     authorization = AUTHORIZATION_HEADER.sub(
@@ -246,7 +268,10 @@ def redact(text: str) -> str:
         lambda item: f"{item.group(1)}<redacted>", credentials
     )
     tokens = SECRET_TOKEN.sub("<redacted-token>", url_params)
-    return JWT_TOKEN.sub("<redacted-token>", tokens)
+    tokens = JWT_TOKEN.sub("<redacted-token>", tokens)
+    for pattern in FORMAT_REDACTION_PATTERNS:
+        tokens = pattern.sub("<redacted-token>", tokens)
+    return tokens
 
 
 def visible_text(text: str, limit: int = MAX_DISPLAY_CHARS) -> str:
@@ -298,6 +323,14 @@ def load_json_file(path: Path) -> JsonValue:
         raise ValueError(f"JSON input exceeds {MAX_JSON_INPUT_BYTES} bytes: {path}")
     value: JsonValue = json.loads(path.read_text(encoding="utf-8"))
     return value
+
+
+SKILL_MATERIAL_MARKERS: Final = ("skills/vibesecurity/references/", "skills/vibesecurity/tests/")
+
+
+def skill_material_skip_reason(rel: str) -> str:
+    lower = rel.replace("\\", "/").lower()
+    return "skill-reference-material" if any(marker in lower for marker in SKILL_MATERIAL_MARKERS) else ""
 
 
 def text_candidate_skip_reason(path: Path) -> str:
@@ -421,7 +454,9 @@ def select_repo_files(
             if not stays_within_root(resolved_root, path):
                 skip(path, "outside-root")
                 continue
-            reason = text_candidate_skip_reason(path)
+            reason = skill_material_skip_reason(
+                path.relative_to(resolved_root).as_posix()
+            ) or text_candidate_skip_reason(path)
             if reason:
                 skip(path, reason)
                 continue

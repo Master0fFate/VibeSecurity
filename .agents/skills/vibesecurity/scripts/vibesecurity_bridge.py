@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -8,12 +9,15 @@ from pathlib import Path
 from typing import Final
 
 from vibesecurity_common import JsonMap, JsonValue, fingerprint, visible_text
+from vibesecurity_standards import standards_block
 
 ANALYZER_COMMANDS: Final[dict[str, tuple[str, ...]]] = {
     "npm-audit": ("npm", "audit", "--json"),
     "pip-audit": ("pip-audit", "--format", "json"),
     "semgrep": ("semgrep", "--json", "."),
     "gitleaks": ("gitleaks", "detect", "--report-format", "json", "--no-banner"),
+    "cargo-audit": ("cargo-audit",),
+    "govulncheck": ("govulncheck", "./..."),
 }
 ANALYZER_VERSION_ARGS: Final[dict[str, tuple[str, ...]]] = {
     "npm-audit": ("npm", "--version"),
@@ -31,6 +35,8 @@ ANALYZER_TIMEOUTS: Final[dict[str, int]] = {
 }
 SUMMARY_ONLY_ANALYZERS: Final = {"cargo-audit", "govulncheck"}
 VERSION_TIMEOUT_SECONDS: Final = 10
+MAX_BRIDGE_CANDIDATES: Final = 1_000
+CWE_IN_TEXT: Final = re.compile(r"CWE-\d{1,5}")
 SEVERITY_MAP: Final = {
     "crit": "critical",
     "critical": "critical",
@@ -48,6 +54,15 @@ SEVERITY_MAP: Final = {
 
 def _normalize_severity(value: str) -> str:
     return SEVERITY_MAP.get(value.strip().lower(), "medium")
+
+
+def _cwe_from(value: JsonValue) -> str:
+    if isinstance(value, str):
+        found = CWE_IN_TEXT.findall(value)
+        return ", ".join(dict.fromkeys(found[:4]))
+    if isinstance(value, list):
+        return ", ".join(dict.fromkeys(cwe for item in value for cwe in CWE_IN_TEXT.findall(str(item)))[:4])
+    return ""
 
 
 def _tool_version(name: str) -> str:
@@ -81,6 +96,40 @@ def _run(argv: tuple[str, ...], root: Path, timeout: int) -> tuple[int, str, str
         return 124, "", f"timed out after {timeout}s", True
 
 
+def _bridge_candidate(
+    tool: str,
+    matcher_id: str,
+    path: str,
+    line: int,
+    snippet: str,
+    reason: str,
+    prompt: str,
+    category: str,
+    severity: str,
+    confidence: str,
+    cwe: str,
+    print_parts: tuple[str, ...],
+) -> JsonMap:
+    return {
+        "matcher_id": matcher_id.lower()[:80],
+        "rule_pack": "bridge",
+        "path": visible_text(path, 500),
+        "line": line,
+        "snippet_redacted": visible_text(snippet, 300),
+        "reason": visible_text(reason, 500),
+        "review_prompt": prompt,
+        "category": category,
+        "severity_hint": severity,
+        "confidence_hint": confidence,
+        "status": "needs-review",
+        "source": "bridge",
+        "tool": tool,
+        "cwe": cwe,
+        "standards": standards_block(cwe, "", "", category),
+        "fingerprint": fingerprint("bridge", tool, *print_parts),
+    }
+
+
 def _npm_audit_candidates(stdout: str) -> tuple[list[JsonMap], str]:
     try:
         data = json.loads(stdout)
@@ -94,38 +143,33 @@ def _npm_audit_candidates(stdout: str) -> tuple[list[JsonMap], str]:
         if not isinstance(info, dict):
             continue
         severity = _normalize_severity(str(info.get("severity", "medium")))
-        advisory_ids: list[str] = []
+        advisory_urls: list[str] = []
+        cwe = ""
         via = info.get("via")
         if isinstance(via, list):
             for entry in via:
                 if isinstance(entry, dict):
                     url = entry.get("url")
-                    title = entry.get("title", "")
-                    source = entry.get("source", 0)
                     if isinstance(url, str) and url:
-                        advisory_ids.append(url)
-                    elif isinstance(title, str) and title and isinstance(source, int) and source > 1950:
-                        advisory_ids.append(f"{title}")
-        advisory_ids = advisory_ids[:8]
-        candidates.append(
-            {
-                "matcher_id": f"bridge-npm-audit-{name}".lower()[:80],
-                "rule_pack": "bridge",
-                "path": "package.json",
-                "line": 0,
-                "snippet_redacted": f"npm audit flags {name}",
-                "reason": f"npm audit reports {severity} severity for {name}",
-                "review_prompt": "Review the advisory and upgrade per the fixed version it names.",
-                "category": "supply-chain",
-                "severity_hint": severity,
-                "confidence_hint": "medium",
-                "status": "needs-review",
-                "source": "bridge",
-                "tool": "npm-audit",
-                "advisory_urls": advisory_ids,
-                "fingerprint": fingerprint("bridge", "npm-audit", name, severity),
-            }
+                        advisory_urls.append(url)
+                    if not cwe:
+                        cwe = _cwe_from(entry.get("cwe"))
+        candidate = _bridge_candidate(
+            "npm-audit",
+            f"bridge-npm-audit-{name}",
+            "package.json",
+            0,
+            f"npm audit flags {name}",
+            f"npm audit reports {severity} severity for {name}",
+            "Review the advisory and upgrade per the fixed version it names.",
+            "supply-chain",
+            severity,
+            "medium",
+            cwe,
+            (name, severity),
         )
+        candidate["advisory_urls"] = advisory_urls[:8]
+        candidates.append(candidate)
     metadata = data.get("metadata")
     summary = ""
     if isinstance(metadata, dict):
@@ -156,30 +200,27 @@ def _pip_audit_candidates(stdout: str) -> tuple[list[JsonMap], str]:
                 continue
             vuln_id = str(vuln.get("id", "unknown"))
             fix_versions = vuln.get("fix_versions")
-            candidates.append(
-                {
-                    "matcher_id": f"bridge-pip-audit-{name}".lower()[:80],
-                    "rule_pack": "bridge",
-                    "path": "environment",
-                    "line": 0,
-                    "snippet_redacted": f"{name} {version or '?'} flagged by pip-audit ({vuln_id})",
-                    "reason": f"pip-audit reports {vuln_id} for {name}",
-                    "review_prompt": "Review the advisory and upgrade to a fixed version.",
-                    "category": "supply-chain",
-                    "severity_hint": "high",
-                    "confidence_hint": "medium",
-                    "status": "needs-review",
-                    "source": "bridge",
-                    "tool": "pip-audit",
-                    "advisory_ids": [vuln_id],
-                    "fixed_versions": [
-                        str(fix) for fix in fix_versions if isinstance(fix, str)
-                    ]
-                    if isinstance(fix_versions, list)
-                    else [],
-                    "fingerprint": fingerprint("bridge", "pip-audit", name, vuln_id),
-                }
+            candidate = _bridge_candidate(
+                "pip-audit",
+                f"bridge-pip-audit-{name}",
+                "environment",
+                0,
+                f"{name} {version or '?'} flagged by pip-audit ({vuln_id})",
+                f"pip-audit reports {vuln_id} for {name}",
+                "Review the advisory and upgrade to a fixed version.",
+                "supply-chain",
+                "high",
+                "medium",
+                "",
+                (name, vuln_id),
             )
+            candidate["advisory_ids"] = [vuln_id]
+            candidate["fixed_versions"] = (
+                [str(fix) for fix in fix_versions if isinstance(fix, str)]
+                if isinstance(fix_versions, list)
+                else []
+            )
+            candidates.append(candidate)
     return candidates, f"{len(candidates)} advisory findings"
 
 
@@ -202,26 +243,28 @@ def _semgrep_candidates(stdout: str) -> tuple[list[JsonMap], str]:
         extra = item.get("extra")
         severity = "medium"
         message = check_id
+        cwe = ""
         if isinstance(extra, dict):
             severity = _normalize_severity(str(extra.get("severity", "warning")))
             message = str(extra.get("message", check_id))
+            metadata = extra.get("metadata")
+            if isinstance(metadata, dict):
+                cwe = _cwe_from(metadata.get("cwe"))
         candidates.append(
-            {
-                "matcher_id": f"bridge-semgrep-{check_id}".lower()[:80],
-                "rule_pack": "bridge",
-                "path": visible_text(path, 500),
-                "line": line if isinstance(line, int) else 0,
-                "snippet_redacted": "semgrep finding (snippet withheld)",
-                "reason": visible_text(message, 500),
-                "review_prompt": "Validate the semgrep finding in context before acting.",
-                "category": "other",
-                "severity_hint": severity,
-                "confidence_hint": "low",
-                "status": "needs-review",
-                "source": "bridge",
-                "tool": "semgrep",
-                "fingerprint": fingerprint("bridge", "semgrep", check_id, path, str(line)),
-            }
+            _bridge_candidate(
+                "semgrep",
+                f"bridge-semgrep-{check_id}",
+                path,
+                line if isinstance(line, int) else 0,
+                "semgrep finding (snippet withheld)",
+                message,
+                "Validate the semgrep finding in context before acting.",
+                "other",
+                severity,
+                "low",
+                cwe,
+                (check_id, path, str(line)),
+            )
         )
     return candidates, f"{len(candidates)} semgrep findings"
 
@@ -242,22 +285,20 @@ def _gitleaks_candidates(stdout: str) -> tuple[list[JsonMap], str]:
         start = item.get("StartLine", 0)
         description = str(item.get("Description", "secret detected"))
         candidates.append(
-            {
-                "matcher_id": f"bridge-gitleaks-{rule_id}".lower()[:80],
-                "rule_pack": "bridge",
-                "path": visible_text(path, 500),
-                "line": start if isinstance(start, int) else 0,
-                "snippet_redacted": f"{rule_id} match (value withheld)",
-                "reason": visible_text(description, 500),
-                "review_prompt": "Confirm the secret is real without printing it; rotate if exposed.",
-                "category": "secrets",
-                "severity_hint": "high",
-                "confidence_hint": "medium",
-                "status": "needs-review",
-                "source": "bridge",
-                "tool": "gitleaks",
-                "fingerprint": fingerprint("bridge", "gitleaks", rule_id, path, str(start)),
-            }
+            _bridge_candidate(
+                "gitleaks",
+                f"bridge-gitleaks-{rule_id}",
+                path,
+                start if isinstance(start, int) else 0,
+                f"{rule_id} match (value withheld)",
+                description,
+                "Confirm the secret is real without printing it; rotate if exposed.",
+                "secrets",
+                "high",
+                "medium",
+                "CWE-798",
+                (rule_id, path, str(start)),
+            )
         )
     return candidates, f"{len(candidates)} secret findings"
 
@@ -272,12 +313,13 @@ PARSERS = {
 
 def run_analyzer(name: str, root: Path) -> JsonMap:
     root = root.resolve()
+    command = ANALYZER_COMMANDS.get(name)
+    if command is None:
+        return {"tool": name, "ran": False, "warning": f"unknown analyzer: {name}"}
+    if shutil.which(command[0]) is None:
+        return {"tool": name, "ran": False, "warning": f"{command[0]} not found on PATH"}
     if name in SUMMARY_ONLY_ANALYZERS:
-        argv = (name.replace("-", "-"),)  # cargo-audit, govulncheck
-        executable = shutil.which(argv[0])
-        if executable is None:
-            return {"tool": name, "ran": False, "warning": f"{argv[0]} not found on PATH"}
-        code, stdout, stderr, failed = _run((argv[0],), root, ANALYZER_TIMEOUTS[name])
+        code, _, stderr, failed = _run(command, root, ANALYZER_TIMEOUTS[name])
         return {
             "tool": name,
             "ran": not failed,
@@ -286,12 +328,6 @@ def run_analyzer(name: str, root: Path) -> JsonMap:
             "candidates": [],
             "warnings": [visible_text(stderr.strip()[:300], 300)] if failed or code not in (0, 1) else [],
         }
-    command = ANALYZER_COMMANDS.get(name)
-    if command is None:
-        return {"tool": name, "ran": False, "warning": f"unknown analyzer: {name}"}
-    executable = shutil.which(command[0])
-    if executable is None:
-        return {"tool": name, "ran": False, "warning": f"{command[0]} not found on PATH"}
     argv = command
     report_path: Path | None = None
     if name == "gitleaks":
@@ -311,13 +347,12 @@ def run_analyzer(name: str, root: Path) -> JsonMap:
                 "warning": visible_text(stderr.strip()[:300], 300),
                 "candidates": [],
             }
-        if name == "gitleaks" and report_path is not None:
+        if report_path is not None:
             try:
                 stdout = report_path.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 stdout = ""
-        parser = PARSERS[name]
-        candidates, summary = parser(stdout)
+        candidates, summary = PARSERS[name](stdout)
         record: JsonMap = {
             "tool": name,
             "ran": True,
@@ -327,9 +362,9 @@ def run_analyzer(name: str, root: Path) -> JsonMap:
             "candidates": candidates[:500],
         }
         if code not in (0, 1):
+            output = (stderr or stdout).strip()
             record["warning"] = visible_text(
-                (stderr or stdout).strip().splitlines()[0][:300] if (stderr or stdout).strip() else f"exit {code}",
-                300,
+                output.splitlines()[0][:300] if output else f"exit {code}", 300
             )
         return record
     finally:
@@ -363,6 +398,3 @@ def bridge_payload(root: Path, analyzers: list[str], allowed: tuple[str, ...]) -
         "candidates": candidates[:MAX_BRIDGE_CANDIDATES],
         "warnings": warnings[:100],
     }
-
-
-MAX_BRIDGE_CANDIDATES: Final = 1_000

@@ -5,8 +5,11 @@ import subprocess
 from pathlib import Path
 from typing import Final
 
-from vibesecurity_common import JsonMap, visible_text
-from vibesecurity_remediation import findings_from_json
+from vibesecurity_common import JsonMap, load_json_file, visible_text
+from vibesecurity_deps import deps_payload
+from vibesecurity_feed import cache_dir as default_cache_dir, load_advisory_db, provenance_block
+from vibesecurity_remediation import findings_from_json, selected_findings
+from vibesecurity_sca import sca_candidates
 from vibesecurity_scan import scan_payload as _base_scan_payload
 
 VERIFY_TEST_TIMEOUT_SECONDS: Final = 600
@@ -15,15 +18,12 @@ VERIFY_TEST_TIMEOUT_SECONDS: Final = 600
 def _augmented_scan_payload(root: Path, cache_dir: Path | None, max_age_hours: int) -> JsonMap:
     """Rerun the matcher scan plus SCA over the current tree."""
     payload = _base_scan_payload(root)
-    if cache_dir is not None:
-        from vibesecurity_sca import sca_candidates
-        from vibesecurity_deps import deps_payload
-        from vibesecurity_feed import load_advisory_db, provenance_block
-
+    directory = cache_dir if cache_dir is not None else default_cache_dir(root)
+    if directory.is_dir():
         deps = deps_payload(root)
         dependencies = deps.get("dependencies")
-        records, warnings = load_advisory_db(cache, max_age_hours)
-        provenance = provenance_block(cache, max_age_hours)
+        records, warnings = load_advisory_db(directory, max_age_hours)
+        provenance = provenance_block(directory, max_age_hours)
         fresh = bool(provenance.get("fresh"))
         sca_items, sca_warnings = sca_candidates(
             dependencies if isinstance(dependencies, list) else [], records, fresh
@@ -72,14 +72,9 @@ def verify_payload(
     cache_dir: Path | None = None,
     max_age_hours: int = 72,
 ) -> JsonMap:
-    """C3: prove each finding is gone, never claim more than measured."""
+    """Prove each finding is gone, never claim more than measured."""
     root = root.resolve()
-    from vibesecurity_common import load_json_file
-
-    data = load_json_file(input_path)
-    findings = findings_from_json(data)
-    from vibesecurity_remediation import selected_findings
-
+    findings = findings_from_json(load_json_file(input_path))
     selected = selected_findings(findings, finding_id)
     if not selected:
         return {

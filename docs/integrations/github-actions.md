@@ -1,6 +1,6 @@
 # GitHub Actions integration
 
-VibeSecurity runs as a local step. It needs Python 3.11+ and the skill checkout; `feed refresh` needs network egress to api.osv.dev and cisa.gov.
+VibeSecurity runs as a local step. It needs Python 3.11+ and the skill checkout; `feed refresh` needs network egress to api.osv.dev, www.cisa.gov, api.first.org (EPSS), registry.npmjs.org, and pypi.org (registry existence checks; set `registry_lookups: false` in `.vibesecurity/config.json` to skip the last two). `scan` reads the resulting `.vibesecurity/cache/` automatically.
 
 ## CI gate (fail on confirmed high or critical)
 

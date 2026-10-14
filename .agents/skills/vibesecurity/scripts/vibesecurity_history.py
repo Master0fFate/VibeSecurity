@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -7,7 +8,8 @@ from pathlib import Path
 from typing import Final
 
 from vibesecurity_common import JsonMap, fingerprint, visible_text
-from vibesecurity_secrets import parse_formats, scan_text
+from vibesecurity_secrets import SECRET_CWE, parse_formats, scan_text
+from vibesecurity_standards import standards_block
 
 MAX_COMMITS: Final = 5_000
 MAX_DIFF_BYTES_PER_COMMIT: Final = 2_000_000
@@ -26,7 +28,6 @@ HISTORY_SKIP_PARTS: Final = {
 class HistoryHit:
     commit: str
     path: str
-    line: int
     format_id: str
     severity_hint: str
     confidence_hint: str
@@ -63,15 +64,14 @@ def scan_history(
     window_months: int,
     all_refs: bool = False,
 ) -> tuple[list[HistoryHit], list[str]]:
-    """Walk `git log -p` within a bounded window and run secret detectors over diffs."""
+    """Walk `git log -p` within a bounded window and run secret detectors over added lines."""
     warnings: list[str] = []
-    log_format = "--pretty=format:@@VSEC:%H"
     args: tuple[str, ...] = (
         "log",
         f"--since={since_date(window_months)}",
         "-p",
         "--no-ext-diff",
-        log_format,
+        "--pretty=format:@@VSEC:%H",
     )
     if all_refs:
         args = (*args, "--all")
@@ -84,7 +84,6 @@ def scan_history(
     seen: set[tuple[str, str, str]] = set()
     commit = ""
     current_path = ""
-    line_number = 0
     commits = 0
     consumed = 0
     for raw_line in raw.split(b"\n"):
@@ -103,33 +102,27 @@ def scan_history(
         if line.startswith("+++ b/"):
             current_path = line[6:]
             continue
-        if line.startswith("+") and not line.startswith("+++"):
-            line_number += 1
-            added = line[1:]
-            if not added.strip():
-                continue
-            for hit in scan_text(added, formats):
-                key = (commit, current_path, hit.format_id)
-                if key in seen:
-                    continue
-                seen.add(key)
-                hits.append(
-                    HistoryHit(
-                        commit=commit[:12],
-                        path=current_path,
-                        line=hit.line,
-                        format_id=hit.format_id,
-                        severity_hint=hit.severity_hint,
-                        confidence_hint=hit.confidence_hint,
-                        description=hit.description,
-                        review_prompt=hit.review_prompt,
-                    )
-                )
-            line_number = 0
-        elif line.startswith("-"):
+        if not line.startswith("+") or line.startswith("+++"):
             continue
-        else:
-            line_number = 0
+        added = line[1:]
+        if not added.strip():
+            continue
+        for hit in scan_text(added, formats):
+            key = (commit, current_path, hit.format_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            hits.append(
+                HistoryHit(
+                    commit=commit[:12],
+                    path=current_path,
+                    format_id=hit.format_id,
+                    severity_hint=hit.severity_hint,
+                    confidence_hint=hit.confidence_hint,
+                    description=hit.description,
+                    review_prompt=hit.review_prompt,
+                )
+            )
     return hits, warnings
 
 
@@ -139,6 +132,7 @@ def history_payload(
     root = root.resolve()
     hits, warnings = scan_history(root, window_months, all_refs)
     working_tree_paths = _working_tree_paths(root)
+    standards = standards_block(SECRET_CWE, "", "", "secrets")
     results: list[JsonMap] = []
     for hit in hits:
         results.append(
@@ -157,6 +151,8 @@ def history_payload(
                 "confidence_hint": hit.confidence_hint,
                 "status": "needs-review",
                 "source": "history-scan",
+                "cwe": SECRET_CWE,
+                "standards": standards,
                 "fingerprint": fingerprint("history", hit.format_id, hit.path),
             }
         )
@@ -176,11 +172,9 @@ def history_payload(
 
 
 def _working_tree_paths(root: Path) -> set[str]:
-    import os
-
     paths: set[str] = set()
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in HISTORY_SKIP_PARTS]
+        dirnames[:] = [name for name in dirnames if name not in HISTORY_SKIP_PARTS]
         for filename in filenames:
             paths.add(str((Path(dirpath) / filename).relative_to(root)).replace("\\", "/"))
     return paths

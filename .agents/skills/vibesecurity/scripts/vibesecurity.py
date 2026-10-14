@@ -62,6 +62,7 @@ def command_payload(args: argparse.Namespace, config: PolicyConfig | None = None
     if config is None:
         config = load_policy_config(root)
         config = merge_policy(config, network_enabled=False if args.offline else None, fail_on=args.fail_on)
+    cache_override = Path(args.cache_dir).resolve() if args.cache_dir else None
     match args.command:
         case "inventory":
             return inventory_payload(root)
@@ -75,7 +76,7 @@ def command_payload(args: argparse.Namespace, config: PolicyConfig | None = None
                 config,
                 advisory_source=Path(args.advisory_db).resolve() if args.advisory_db else None,
                 analyzers=[name.strip() for name in (args.run_analyzers or "").split(",") if name.strip()],
-                cache_dir=Path(args.cache_dir).resolve() if args.cache_dir else None,
+                cache_dir=cache_override,
             )
         case "report":
             return report_payload(
@@ -99,14 +100,12 @@ def command_payload(args: argparse.Namespace, config: PolicyConfig | None = None
                 import_bundle,
             )
 
-            directory = (
-                Path(args.cache_dir).resolve()
-                if args.cache_dir
-                else default_cache_dir(root)
-            )
+            directory = cache_override if cache_override is not None else default_cache_dir(root)
             match args.action:
                 case "refresh":
-                    return feed_refresh_payload(root, directory, config.network_enabled)
+                    return feed_refresh_payload(
+                        root, directory, config.network_enabled, config.registry_lookups
+                    )
                 case "status":
                     return feed_status_payload(directory, config.max_cache_age_hours)
                 case "export":
@@ -119,13 +118,12 @@ def command_payload(args: argparse.Namespace, config: PolicyConfig | None = None
                 case _:
                     raise ValueError(f"unknown feed action: {args.action}")
         case "sca":
-            from vibesecurity_pipeline import resolve_advisory_records
-            from vibesecurity_sca import sca_candidates
             from vibesecurity_deps import deps_payload
+            from vibesecurity_feed import provenance_block
+            from vibesecurity_pipeline import default_advisory_source, resolve_advisory_records
+            from vibesecurity_sca import sca_candidates
 
-            source = Path(args.advisory_db).resolve() if args.advisory_db else None
-            if source is None and args.cache_dir:
-                source = Path(args.cache_dir).resolve()
+            source = Path(args.advisory_db).resolve() if args.advisory_db else default_advisory_source(root, cache_override)
             records, warnings, bundle_provenance = resolve_advisory_records(source)
             deps = deps_payload(root)
             dependencies = deps.get("dependencies")
@@ -133,8 +131,6 @@ def command_payload(args: argparse.Namespace, config: PolicyConfig | None = None
                 provenance = bundle_provenance
                 fresh = True
             else:
-                from vibesecurity_feed import provenance_block
-
                 provenance = (
                     provenance_block(source, config.max_cache_age_hours) if source else {}
                 )
@@ -159,7 +155,7 @@ def command_payload(args: argparse.Namespace, config: PolicyConfig | None = None
                 root_path(root, args.input),
                 str(args.finding),
                 str(args.test_cmd or ""),
-                cache_dir=Path(args.cache_dir).resolve() if args.cache_dir else None,
+                cache_dir=cache_override,
                 max_age_hours=config.max_cache_age_hours,
             )
         case "baseline":
@@ -208,7 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--advisory-db",
         default="",
-        help="Advisory cache directory or exported bundle file for scan/sca/verify.",
+        help="Advisory cache directory or exported bundle file for scan/sca/verify (default: .vibesecurity/cache when present).",
     )
     parser.add_argument(
         "--cache-dir",
@@ -254,10 +250,6 @@ class UsageParser(argparse.ArgumentParser):
     def error(self, message: str):  # type: ignore[override]
         print(json.dumps({"error": f"usage: {message}"}), file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
-
-
-def _fail_on_applies(args: argparse.Namespace) -> bool:
-    return args.command in {"scan", "report", "verify"} and args.fail_on != "none"
 
 
 def _exit_code_for(args: argparse.Namespace, payload: JsonMap, fail_on: str) -> int:

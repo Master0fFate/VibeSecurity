@@ -1,17 +1,31 @@
-# Restricted matcher YAML: use one-line scalar values and lists only.
-# Categories: authz, authn, injection, ssrf, xss, secrets, supply-chain, ci-cd,
-# ai-agentic, privacy, crypto, availability, or other.
+# Restricted matcher YAML: one-line scalar values and lists only.
+# Double-quoted values honour only the \" escape (regex escapes like \b survive);
+# single-quoted values honour ''. Categories: authz, authn, injection, ssrf, xss,
+# secrets, supply-chain, ci-cd, ai-agentic, privacy, crypto, availability, other.
+# cwe / owasp / asvs are optional but validated: CWE-<n>; A<nn>:2025, LLM<nn>:2025,
+# ASI<nn>:2026; V<chapter>.<section>.<requirement>. See references/standards/.
 - id: local-project-short-name
   category: other
   severity_hint: medium
   confidence_hint: medium
+  cwe: "CWE-20"
+  owasp: "A05:2025"
+  asvs: "V2.2.1"
   globs:
     - "**/*.ts"
     - "**/*.py"
   patterns:
     - "risky case-insensitive substring"
+  regex_patterns:
+    - "(?i)optional\\s+regex"
+  exclude_patterns:
+    - "substring that suppresses a hit on the same line"
+  same_line_terms:
+    - "term that must also be on the matched line"
   nearby_terms:
-    - "optional contextual term"
+    - "term that must appear within six lines"
+  nearby_excludes:
+    - "term within six lines that suppresses the hit"
   reason: "Why this candidate deserves manual review."
   review_prompt: "Confirm reachability, boundary crossing, impact, and safe remediation before reporting."
   positive_examples:

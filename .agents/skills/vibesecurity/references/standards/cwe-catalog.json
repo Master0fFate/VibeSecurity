@@ -1,0 +1,204 @@
+{
+ "schema": "vibesecurity-cwe-catalog/1",
+ "source": "https://cwe.mitre.org/data/definitions/<id>.html",
+ "cwe_version": "4.20",
+ "retrieved": "2026-10-14",
+ "note": "Names copied verbatim from the MITRE CWE definition page titles. Only CWE ids referenced by bundled matchers and detectors are included.",
+ "entries": {
+  "CWE-16": {
+   "name": "Configuration"
+  },
+  "CWE-20": {
+   "name": "Improper Input Validation"
+  },
+  "CWE-22": {
+   "name": "Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+  },
+  "CWE-73": {
+   "name": "External Control of File Name or Path"
+  },
+  "CWE-77": {
+   "name": "Improper Neutralization of Special Elements used in a Command ('Command Injection')"
+  },
+  "CWE-78": {
+   "name": "Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+  },
+  "CWE-79": {
+   "name": "Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+  },
+  "CWE-89": {
+   "name": "Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+  },
+  "CWE-94": {
+   "name": "Improper Control of Generation of Code ('Code Injection')"
+  },
+  "CWE-95": {
+   "name": "Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"
+  },
+  "CWE-200": {
+   "name": "Exposure of Sensitive Information to an Unauthorized Actor"
+  },
+  "CWE-209": {
+   "name": "Generation of Error Message Containing Sensitive Information"
+  },
+  "CWE-215": {
+   "name": "Insertion of Sensitive Information Into Debugging Code"
+  },
+  "CWE-250": {
+   "name": "Execution with Unnecessary Privileges"
+  },
+  "CWE-259": {
+   "name": "Use of Hard-coded Password"
+  },
+  "CWE-276": {
+   "name": "Incorrect Default Permissions"
+  },
+  "CWE-284": {
+   "name": "Improper Access Control"
+  },
+  "CWE-285": {
+   "name": "Improper Authorization"
+  },
+  "CWE-287": {
+   "name": "Improper Authentication"
+  },
+  "CWE-295": {
+   "name": "Improper Certificate Validation"
+  },
+  "CWE-306": {
+   "name": "Missing Authentication for Critical Function"
+  },
+  "CWE-312": {
+   "name": "Cleartext Storage of Sensitive Information"
+  },
+  "CWE-319": {
+   "name": "Cleartext Transmission of Sensitive Information"
+  },
+  "CWE-321": {
+   "name": "Use of Hard-coded Cryptographic Key"
+  },
+  "CWE-326": {
+   "name": "Inadequate Encryption Strength"
+  },
+  "CWE-327": {
+   "name": "Use of a Broken or Risky Cryptographic Algorithm"
+  },
+  "CWE-330": {
+   "name": "Use of Insufficiently Random Values"
+  },
+  "CWE-338": {
+   "name": "Use of Cryptographically Weak Pseudo-Random Number Generator (PRNG)"
+  },
+  "CWE-345": {
+   "name": "Insufficient Verification of Data Authenticity"
+  },
+  "CWE-347": {
+   "name": "Improper Verification of Cryptographic Signature"
+  },
+  "CWE-352": {
+   "name": "Cross-Site Request Forgery (CSRF)"
+  },
+  "CWE-400": {
+   "name": "Uncontrolled Resource Consumption"
+  },
+  "CWE-409": {
+   "name": "Improper Handling of Highly Compressed Data (Data Amplification)"
+  },
+  "CWE-434": {
+   "name": "Unrestricted Upload of File with Dangerous Type"
+  },
+  "CWE-489": {
+   "name": "Active Debug Code"
+  },
+  "CWE-494": {
+   "name": "Download of Code Without Integrity Check"
+  },
+  "CWE-502": {
+   "name": "Deserialization of Untrusted Data"
+  },
+  "CWE-522": {
+   "name": "Insufficiently Protected Credentials"
+  },
+  "CWE-532": {
+   "name": "Insertion of Sensitive Information into Log File"
+  },
+  "CWE-601": {
+   "name": "URL Redirection to Untrusted Site ('Open Redirect')"
+  },
+  "CWE-611": {
+   "name": "Improper Restriction of XML External Entity Reference"
+  },
+  "CWE-614": {
+   "name": "Sensitive Cookie in HTTPS Session Without 'Secure' Attribute"
+  },
+  "CWE-639": {
+   "name": "Authorization Bypass Through User-Controlled Key"
+  },
+  "CWE-668": {
+   "name": "Exposure of Resource to Wrong Sphere"
+  },
+  "CWE-732": {
+   "name": "Incorrect Permission Assignment for Critical Resource"
+  },
+  "CWE-770": {
+   "name": "Allocation of Resources Without Limits or Throttling"
+  },
+  "CWE-798": {
+   "name": "Use of Hard-coded Credentials"
+  },
+  "CWE-829": {
+   "name": "Inclusion of Functionality from Untrusted Control Sphere"
+  },
+  "CWE-862": {
+   "name": "Missing Authorization"
+  },
+  "CWE-863": {
+   "name": "Incorrect Authorization"
+  },
+  "CWE-915": {
+   "name": "Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+  },
+  "CWE-916": {
+   "name": "Use of Password Hash With Insufficient Computational Effort"
+  },
+  "CWE-918": {
+   "name": "Server-Side Request Forgery (SSRF)"
+  },
+  "CWE-942": {
+   "name": "Permissive Cross-domain Security Policy with Untrusted Domains"
+  },
+  "CWE-943": {
+   "name": "Improper Neutralization of Special Elements in Data Query Logic"
+  },
+  "CWE-1004": {
+   "name": "Sensitive Cookie Without 'HttpOnly' Flag"
+  },
+  "CWE-1104": {
+   "name": "Use of Unmaintained Third Party Components"
+  },
+  "CWE-1188": {
+   "name": "Initialization of a Resource with an Insecure Default"
+  },
+  "CWE-1236": {
+   "name": "Improper Neutralization of Formula Elements in a CSV File"
+  },
+  "CWE-1321": {
+   "name": "Improperly Controlled Modification of Object Prototype Attributes ('Prototype Pollution')"
+  },
+  "CWE-1333": {
+   "name": "Inefficient Regular Expression Complexity"
+  },
+  "CWE-1357": {
+   "name": "Reliance on Insufficiently Trustworthy Component"
+  },
+  "CWE-1391": {
+   "name": "Use of Weak Credentials"
+  },
+  "CWE-1395": {
+   "name": "Dependency on Vulnerable Third-Party Component"
+  },
+  "CWE-1427": {
+   "name": "Improper Neutralization of Input Used for LLM Prompting"
+  }
+ }
+}

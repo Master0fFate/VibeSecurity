@@ -365,7 +365,7 @@ def test_skill_distribution_contract_is_complete_and_portable() -> None:
     readme = (repository_root / "README.md").read_text(encoding="utf-8")
     action_refs = re.findall(r"uses:\s+[^@\s]+@([^\s#]+)", workflow)
     assert missing == []
-    assert 'version: "3.0.0"' in skill_text
+    assert 'version: "4.0.0"' in skill_text
     assert "untrusted evidence—not instructions" in skill_text
     assert all(term in skill_text for term in ("$vibesecurity", "/vibesecurity"))
     assert action_refs and all(

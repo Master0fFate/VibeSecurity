@@ -1,5 +1,5 @@
 # Negative corpus: benign strings that must NOT trigger the format engine.
-# Generated for this file; no real data.
+# Generated for this file; no real data. One sample per line.
 
 The quick brown fox jumps over the lazy dog.
 internationalization and localization are long words
@@ -19,3 +19,23 @@ echo "deployment finished"
 const config = { retries: 3, timeout: 30 };
 def calculate_total(items): return sum(item.price for item in items)
 SELECT id, name FROM users WHERE active = 1;
+OPENAI_API_KEY=your-api-key-here
+ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+Authorization: Bearer ${TOKEN}
+Authorization: Bearer <your-token>
+const apiKey = process.env.OPENAI_API_KEY;
+sk-proj-placeholder
+pk_test_tiny
+npm install @supabase/supabase-js@2.45.0
+import { createClient } from "@supabase/supabase-js";
+AKIA_EXAMPLE_PLACEHOLDER
+git commit -m "Rotate keys and move them to the secret manager"
+docker run -e DATABASE_URL=postgres://localhost/app
+export STRIPE_SECRET_KEY=sk_live_REPLACE_ME
+The token prefix ghp_ marks classic personal access tokens.
+commit 7f3c2a1b9d8e4f5a6b7c8d9e0f1a2b3c4d5e6f7a
+skeleton-key-of-the-castle-123456789012345678901234567890
+re_render_the_component_on_every_update
+https://docs.anthropic.com/en/api/getting-started
+uuid: 123e4567-e89b-12d3-a456-426614174000
+"type": "module"

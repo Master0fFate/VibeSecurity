@@ -13,9 +13,9 @@ MAX_CONFIG_BYTES: Final = 100_000
 DEFAULT_MAX_CACHE_AGE_HOURS: Final = 72
 DEFAULT_HISTORY_WINDOW_MONTHS: Final = 12
 DEFAULT_BASELINE_MAX_AGE_DAYS: Final = 180
-DEFAULT_TTD_TARGET_HOURS: Final = 48
+FAIL_ON_VALUES: Final = frozenset({"none", "confirmed", "confirmed-high", "critical"})
 
-BOOL_KEYS: Final = {"network_enabled"}
+BOOL_KEYS: Final = {"network_enabled", "registry_lookups"}
 STR_KEYS: Final = {"fail_on"}
 INT_KEYS: Final = {
     "max_cache_age_hours",
@@ -35,6 +35,7 @@ KNOWN_KEYS: Final = {
 @dataclass(frozen=True, slots=True)
 class PolicyConfig:
     network_enabled: bool = True
+    registry_lookups: bool = True
     fail_on: str = "none"
     max_cache_age_hours: int = DEFAULT_MAX_CACHE_AGE_HOURS
     history_window_months: int = DEFAULT_HISTORY_WINDOW_MONTHS
@@ -54,6 +55,7 @@ class PolicyConfig:
         return {
             "schema_version": CONFIG_SCHEMA_VERSION,
             "network_enabled": self.network_enabled,
+            "registry_lookups": self.registry_lookups,
             "fail_on": self.fail_on,
             "max_cache_age_hours": self.max_cache_age_hours,
             "history_window_months": self.history_window_months,
@@ -146,18 +148,19 @@ def load_policy_config(root: Path) -> PolicyConfig:
             warnings.append(f"{CONFIG_FILE}: unknown key '{key}' ignored")
             continue
         settings[key] = value
+    defaults = PolicyConfig()
     network = (
         _coerce_bool(settings["network_enabled"], "network_enabled", warnings)
         if "network_enabled" in settings
-        else True
+        else None
+    )
+    registry = (
+        _coerce_bool(settings["registry_lookups"], "registry_lookups", warnings)
+        if "registry_lookups" in settings
+        else None
     )
     fail_on = (
-        _coerce_str(
-            settings["fail_on"],
-            "fail_on",
-            warnings,
-            frozenset({"none", "confirmed", "confirmed-high", "critical"}),
-        )
+        _coerce_str(settings["fail_on"], "fail_on", warnings, FAIL_ON_VALUES)
         if "fail_on" in settings
         else None
     )
@@ -188,20 +191,13 @@ def load_policy_config(root: Path) -> PolicyConfig:
         else None
     )
     return PolicyConfig(
-        network_enabled=network if network is not None else True,
-        fail_on=fail_on if fail_on is not None else "none",
-        max_cache_age_hours=(
-            cache_age if cache_age is not None else DEFAULT_MAX_CACHE_AGE_HOURS
-        ),
-        history_window_months=(
-            history if history is not None else DEFAULT_HISTORY_WINDOW_MONTHS
-        ),
-        baseline_max_age_days=(
-            baseline_age if baseline_age is not None else DEFAULT_BASELINE_MAX_AGE_DAYS
-        ),
-        allowed_analyzers=(
-            analyzers if analyzers is not None else PolicyConfig().allowed_analyzers
-        ),
+        network_enabled=network if network is not None else defaults.network_enabled,
+        registry_lookups=registry if registry is not None else defaults.registry_lookups,
+        fail_on=fail_on if fail_on is not None else defaults.fail_on,
+        max_cache_age_hours=cache_age if cache_age is not None else defaults.max_cache_age_hours,
+        history_window_months=history if history is not None else defaults.history_window_months,
+        baseline_max_age_days=baseline_age if baseline_age is not None else defaults.baseline_max_age_days,
+        allowed_analyzers=analyzers if analyzers is not None else defaults.allowed_analyzers,
         warnings=tuple(warnings[:20]),
         source="file",
     )
@@ -211,6 +207,7 @@ def merge_policy(config: PolicyConfig, **cli_overrides: JsonValue) -> PolicyConf
     """Apply CLI overrides on top of the config file. CLI > config > defaults."""
     merged = dict(
         network_enabled=config.network_enabled,
+        registry_lookups=config.registry_lookups,
         fail_on=config.fail_on,
         max_cache_age_hours=config.max_cache_age_hours,
         history_window_months=config.history_window_months,
@@ -220,13 +217,11 @@ def merge_policy(config: PolicyConfig, **cli_overrides: JsonValue) -> PolicyConf
     for key, value in cli_overrides.items():
         if value is None:
             continue
-        if key in ("network_enabled",) and isinstance(value, bool):
+        if key in BOOL_KEYS and isinstance(value, bool):
             merged[key] = value
-        elif key in ("fail_on",) and isinstance(value, str):
+        elif key in STR_KEYS and isinstance(value, str):
             merged[key] = value
-        elif key in ("max_cache_age_hours", "history_window_months", "baseline_max_age_days") and (
-            isinstance(value, int) and not isinstance(value, bool)
-        ):
+        elif key in INT_KEYS and isinstance(value, int) and not isinstance(value, bool):
             merged[key] = value
     return PolicyConfig(
         warnings=config.warnings,

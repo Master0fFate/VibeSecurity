@@ -7,26 +7,45 @@ from pathlib import Path
 from typing import Final
 
 from vibesecurity_common import stays_within_root
+from vibesecurity_standards import valid_asvs, valid_cwe, valid_owasp
 
 NEARBY_WINDOW_LINES: Final = 6
 MAX_MATCHER_FILE_BYTES: Final = 256_000
 MAX_MATCHERS: Final = 512
 MAX_LIST_VALUES: Final = 64
 MAX_FIELD_CHARS: Final = 500
+MAX_REGEX_CHARS: Final = 300
+MAX_REGEX_LINE_CHARS: Final = 4_000
 MATCHER_ID: Final = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
+BACKREFERENCE: Final = re.compile(r"\\[1-9]|\(\?P=")
+UNBOUNDED_BRACE: Final = re.compile(r"\{\d*,\}")
 SCALAR_FIELDS: Final = {
     "category",
     "severity_hint",
     "confidence_hint",
     "reason",
     "review_prompt",
+    "cwe",
+    "owasp",
+    "asvs",
 }
 LIST_FIELDS: Final = {
     "globs",
     "patterns",
+    "regex_patterns",
+    "exclude_patterns",
+    "same_line_terms",
     "nearby_terms",
+    "nearby_excludes",
     "positive_examples",
     "negative_examples",
+}
+LOWERCASE_LIST_FIELDS: Final = {
+    "patterns",
+    "exclude_patterns",
+    "same_line_terms",
+    "nearby_terms",
+    "nearby_excludes",
 }
 ALLOWED_CATEGORIES: Final = {
     "authz",
@@ -54,16 +73,60 @@ PROJECT_SPECIFIC_MARKERS: Final = (
 )
 
 
-def is_project_specific_value(value: str) -> bool:
+def is_project_specific_value(value: str, glob: bool = False) -> bool:
     """Reject absolute paths, home expansions, and user-directory markers.
 
     Bundled and taught matchers must describe vulnerability classes, never one
-    machine, user, or repository.
+    machine, user, or repository. Globs may never be absolute; substring
+    patterns may start with a slash (for example a well-known socket path).
     """
     stripped = value.strip()
-    if stripped.startswith("/") or stripped.startswith("~"):
+    if stripped.startswith("~") or (glob and stripped.startswith("/")):
         return True
     return any(marker in stripped for marker in PROJECT_SPECIFIC_MARKERS)
+
+
+def has_nested_unbounded_quantifier(pattern: str) -> bool:
+    stack: list[bool] = []
+    in_class = False
+    index = 0
+    while index < len(pattern):
+        character = pattern[index]
+        if character == "\\":
+            index += 2
+            continue
+        if in_class:
+            in_class = character != "]"
+            index += 1
+            continue
+        if character == "[":
+            in_class = True
+        elif character == "(":
+            stack.append(False)
+        elif character == ")":
+            inner_repeats = stack.pop() if stack else False
+            following = pattern[index + 1 : index + 2]
+            if inner_repeats and (following in {"*", "+"} or UNBOUNDED_BRACE.match(pattern[index + 1 :])):
+                return True
+        elif character in {"*", "+"} or UNBOUNDED_BRACE.match(pattern[index:]):
+            if stack:
+                stack[-1] = True
+        index += 1
+    return False
+
+
+def unsafe_regex_reason(pattern: str) -> str:
+    if len(pattern) > MAX_REGEX_CHARS:
+        return f"regex exceeds {MAX_REGEX_CHARS} characters"
+    if BACKREFERENCE.search(pattern):
+        return "regex backreferences are not allowed"
+    if has_nested_unbounded_quantifier(pattern):
+        return "regex nests an unbounded quantifier inside a repeated group"
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        return f"regex does not compile ({exc.msg})"
+    return ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +143,13 @@ class Matcher:
     rule_pack: str
     positive_examples: tuple[str, ...] = ()
     negative_examples: tuple[str, ...] = ()
+    regex_patterns: tuple[re.Pattern[str], ...] = ()
+    exclude_patterns: tuple[str, ...] = ()
+    same_line_terms: tuple[str, ...] = ()
+    nearby_excludes: tuple[str, ...] = ()
+    cwe: str = ""
+    owasp: str = ""
+    asvs: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,16 +219,6 @@ def load_matcher_catalog(root: Path) -> MatcherCatalog:
 
 def load_matchers(root: Path) -> list[Matcher]:
     return list(load_matcher_catalog(root).matchers)
-
-
-def dedupe_matchers(matchers: list[Matcher]) -> list[Matcher]:
-    seen: set[str] = set()
-    unique: list[Matcher] = []
-    for matcher in matchers:
-        if matcher.matcher_id not in seen:
-            unique.append(matcher)
-            seen.add(matcher.matcher_id)
-    return unique
 
 
 def parse_matcher_file(path: Path) -> list[Matcher]:
@@ -264,20 +324,30 @@ def invalid_matcher_reason(draft: dict[str, str], lists: dict[str, list[str]]) -
     confidence = draft.get("confidence_hint", "medium")
     if confidence not in ALLOWED_CONFIDENCE:
         return f"unsupported confidence_hint '{confidence}'"
-    if not lists["patterns"]:
+    if not lists.get("patterns") and not lists.get("regex_patterns"):
         return "at least one pattern is required"
     for field, values in lists.items():
         if len(values) > MAX_LIST_VALUES:
             return f"{field} exceeds {MAX_LIST_VALUES} values"
         if any(not value or len(value) > MAX_FIELD_CHARS for value in values):
             return f"{field} contains an empty or oversized value"
-        if field in {"globs", "patterns"}:
+        if field in {"globs", "patterns", "regex_patterns"}:
             for value in values:
-                if is_project_specific_value(value):
+                if is_project_specific_value(value, glob=field == "globs"):
                     return f"{field} value looks project-specific or machine-specific: {value[:80]}"
+    for value in lists.get("regex_patterns", []):
+        reason = unsafe_regex_reason(value)
+        if reason:
+            return f"regex_patterns rejected: {reason}: {value[:80]}"
     for field in ("reason", "review_prompt"):
         if len(draft.get(field, "")) > MAX_FIELD_CHARS:
             return f"{field} exceeds {MAX_FIELD_CHARS} characters"
+    if not valid_cwe(draft.get("cwe", "")):
+        return "cwe must be one or more comma-separated CWE-<number> ids"
+    if not valid_owasp(draft.get("owasp", "")):
+        return "owasp must use A<nn>:2025, LLM<nn>:2025, or ASI<nn>:2026 ids"
+    if not valid_asvs(draft.get("asvs", "")):
+        return "asvs must use V<chapter>.<section>.<requirement> ids"
     return ""
 
 
@@ -297,6 +367,10 @@ def maybe_add_matcher(
                 f"line {line_number}: matcher '{draft.get('id', 'unknown')}' ignored: {reason}"
             )
         return
+    lowered = {
+        field: tuple(value.lower() for value in lists.get(field, []))
+        for field in LOWERCASE_LIST_FIELDS
+    }
     items.append(
         Matcher(
             matcher_id=draft["id"],
@@ -304,8 +378,8 @@ def maybe_add_matcher(
             severity_hint=draft.get("severity_hint", "medium"),
             confidence_hint=draft.get("confidence_hint", "medium"),
             globs=tuple(lists["globs"] or ["**/*"]),
-            patterns=tuple(lists["patterns"]),
-            nearby_terms=tuple(lists["nearby_terms"]),
+            patterns=lowered["patterns"],
+            nearby_terms=lowered["nearby_terms"],
             reason=draft.get("reason", "Potential security review candidate."),
             review_prompt=draft.get(
                 "review_prompt",
@@ -314,12 +388,29 @@ def maybe_add_matcher(
             rule_pack=draft.get("rule_pack", "local"),
             positive_examples=tuple(lists["positive_examples"]),
             negative_examples=tuple(lists["negative_examples"]),
+            regex_patterns=tuple(re.compile(value) for value in lists.get("regex_patterns", [])),
+            exclude_patterns=lowered["exclude_patterns"],
+            same_line_terms=lowered["same_line_terms"],
+            nearby_excludes=lowered["nearby_excludes"],
+            cwe=draft.get("cwe", ""),
+            owasp=draft.get("owasp", ""),
+            asvs=draft.get("asvs", ""),
         )
     )
 
 
 def clean_value(value: str) -> str:
-    return value.strip().strip('"').strip("'")
+    """Unquote one scalar.
+
+    Double-quoted values honour only the \\\" escape so regex escapes such as
+    \\b survive untouched; single-quoted values honour the YAML '' escape.
+    """
+    stripped = value.strip()
+    if len(stripped) >= 2 and stripped[0] == '"' and stripped[-1] == '"':
+        return stripped[1:-1].replace('\\"', '"')
+    if len(stripped) >= 2 and stripped[0] == "'" and stripped[-1] == "'":
+        return stripped[1:-1].replace("''", "'")
+    return stripped
 
 
 def fallback_matchers() -> list[Matcher]:
@@ -335,6 +426,7 @@ def fallback_matchers() -> list[Matcher]:
             reason="Potential hardcoded secret.",
             review_prompt="Confirm whether the value is real without printing it.",
             rule_pack="fallback",
+            cwe="CWE-798",
         ),
         Matcher(
             matcher_id="ai-output-to-shell",
@@ -347,6 +439,7 @@ def fallback_matchers() -> list[Matcher]:
             reason="Potential model output to command execution.",
             review_prompt="Confirm whether model output can influence command execution.",
             rule_pack="fallback",
+            cwe="CWE-78",
         ),
         Matcher(
             matcher_id="github-actions-pr-target",
@@ -359,13 +452,18 @@ def fallback_matchers() -> list[Matcher]:
             reason="Privileged workflow may execute untrusted fork code.",
             review_prompt="Confirm whether attacker-controlled code runs with trusted token or secrets.",
             rule_pack="fallback",
+            cwe="CWE-829",
         ),
     ]
 
 
 def matched_nearby_terms(matcher: Matcher, window_lines: list[str]) -> list[str]:
     window = "\n".join(window_lines).lower()
-    return [term for term in matcher.nearby_terms if term.lower() in window]
+    return [term for term in matcher.nearby_terms if term in window]
+
+
+def needs_window(matcher: Matcher) -> bool:
+    return bool(matcher.nearby_terms or matcher.nearby_excludes)
 
 
 def glob_matches(rel: str, glob: str) -> bool:
@@ -395,9 +493,21 @@ def glob_matches(rel: str, glob: str) -> bool:
 
 def matcher_matches_line(matcher: Matcher, line: str, window_lines: list[str]) -> bool:
     lower_line = line.lower()
-    if not any(pattern.lower() in lower_line for pattern in matcher.patterns):
+    if not any(pattern in lower_line for pattern in matcher.patterns) and not any(
+        regex.search(line[:MAX_REGEX_LINE_CHARS]) for regex in matcher.regex_patterns
+    ):
         return False
-    return not matcher.nearby_terms or bool(matched_nearby_terms(matcher, window_lines))
+    if any(excluded in lower_line for excluded in matcher.exclude_patterns):
+        return False
+    if matcher.same_line_terms and not any(term in lower_line for term in matcher.same_line_terms):
+        return False
+    if matcher.nearby_terms and not matched_nearby_terms(matcher, window_lines):
+        return False
+    if matcher.nearby_excludes:
+        window = "\n".join(window_lines).lower()
+        if any(term in window for term in matcher.nearby_excludes):
+            return False
+    return True
 
 
 def matcher_applies(

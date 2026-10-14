@@ -11,8 +11,11 @@ from vibesecurity_common import (
     fingerprint,
     visible_text,
 )
+from vibesecurity_cvss import cvss_summary
 from vibesecurity_deps import OSV_ECOSYSTEMS, deps_payload
-from vibesecurity_feed import load_advisory_db, provenance_block
+from vibesecurity_feed import EPSS_RECORD_KEY, load_advisory_db, provenance_block
+from vibesecurity_prioritize import advisory_priority_fields
+from vibesecurity_standards import standards_block
 
 OSV_URL_PREFIX: Final = "https://osv.dev/vulnerability/"
 NVD_URL_PREFIX: Final = "https://nvd.nist.gov/vuln/detail/"
@@ -27,6 +30,7 @@ SEVERITY_BANDS: Final = {
     "MEDIUM": "medium",
     "LOW": "low",
 }
+DEFAULT_SEVERITY: Final = "medium"
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,23 +112,40 @@ def _fixed_versions_from_ranges(affected: JsonMap) -> list[str]:
     return fixed
 
 
-def _advisory_severity(vuln: JsonMap) -> str:
+@dataclass(frozen=True, slots=True)
+class AdvisorySeverity:
+    band: str
+    basis: str
+    cvss: JsonMap | None
+
+
+def advisory_severity(vuln: JsonMap) -> AdvisorySeverity:
+    cvss = cvss_summary(vuln.get("severity"))
     database_specific = vuln.get("database_specific")
     if isinstance(database_specific, dict):
         severity = database_specific.get("severity")
         if isinstance(severity, str):
             band = SEVERITY_BANDS.get(severity.upper())
             if band:
-                return band
-    severity_array = vuln.get("severity")
-    if isinstance(severity_array, list):
-        for item in severity_array:
-            if isinstance(item, dict) and item.get("type") == "CVSS_V3":
-                score_text = str(item.get("score", ""))
-                match = re.search(r"CVSS:3\.[01]/AV:[^/]+/AC:[^/]+/PR:[^/]+/UI:[^/]+/S:[C]?/C:(\w)", score_text)
-                if match:
-                    return "high"
-    return "high"
+                return AdvisorySeverity(band, "advisory database_specific.severity (GHSA review band)", cvss)
+    if cvss and isinstance(cvss.get("severity"), str):
+        return AdvisorySeverity(str(cvss["severity"]), str(cvss.get("basis", "cvss")), cvss)
+    return AdvisorySeverity(
+        DEFAULT_SEVERITY,
+        f"advisory carries no severity band or CVSS v3 vector; defaulted to {DEFAULT_SEVERITY} for triage",
+        cvss,
+    )
+
+
+def advisory_cwe(vuln: JsonMap) -> str:
+    database_specific = vuln.get("database_specific")
+    if isinstance(database_specific, dict):
+        cwe_ids = database_specific.get("cwe_ids")
+        if isinstance(cwe_ids, list):
+            ids = [item for item in cwe_ids if isinstance(item, str) and item.startswith("CWE-")]
+            if ids:
+                return ", ".join(ids[:4])
+    return ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +231,16 @@ def kev_cve_ids(records: dict[str, JsonValue]) -> set[str]:
     return ids
 
 
+def epss_scores(records: dict[str, JsonValue]) -> dict[str, JsonMap]:
+    record = records.get(EPSS_RECORD_KEY)
+    if not isinstance(record, dict) or record.get("schema") != "vibesecurity-epss-record/1":
+        return {}
+    scores = record.get("scores")
+    if not isinstance(scores, dict):
+        return {}
+    return {key: value for key, value in scores.items() if isinstance(value, dict)}
+
+
 def _source_citations(vuln: JsonMap) -> list[JsonMap]:
     sources: list[JsonMap] = []
     vuln_id = vuln.get("id")
@@ -245,6 +276,27 @@ def _recommended_version(installed: str, fixed_versions: tuple[str, ...]) -> str
     return None
 
 
+def _advisory_order(vuln: JsonValue) -> tuple[int, str]:
+    """GHSA records (reviewed severity band) before ecosystem mirrors of the same CVE."""
+    if not isinstance(vuln, dict):
+        return (2, "")
+    vuln_id = str(vuln.get("id", ""))
+    database_specific = vuln.get("database_specific")
+    has_band = isinstance(database_specific, dict) and isinstance(database_specific.get("severity"), str)
+    return (0 if has_band else 1, vuln_id)
+
+
+def _cve_aliases(vuln: JsonMap) -> list[str]:
+    ids: list[str] = []
+    vuln_id = vuln.get("id")
+    if isinstance(vuln_id, str) and vuln_id.startswith("CVE-"):
+        ids.append(vuln_id)
+    aliases = vuln.get("aliases")
+    if isinstance(aliases, list):
+        ids.extend(alias for alias in aliases if isinstance(alias, str) and alias.startswith("CVE-"))
+    return ids
+
+
 def sca_candidates(
     dependencies: list[JsonMap],
     records: dict[str, JsonValue],
@@ -254,6 +306,7 @@ def sca_candidates(
     warnings: list[str] = []
     candidates: list[JsonMap] = []
     kev = kev_cve_ids(records)
+    epss = epss_scores(records)
     for dep in dependencies:
         ecosystem = dep.get("ecosystem")
         name = dep.get("name")
@@ -272,8 +325,12 @@ def sca_candidates(
         vulns = record.get("vulns")
         if not isinstance(vulns, list):
             continue
-        for vuln in vulns:
+        seen_cves: set[str] = set()
+        for vuln in sorted(vulns, key=_advisory_order):
             if not isinstance(vuln, dict):
+                continue
+            cve_ids = _cve_aliases(vuln)
+            if cve_ids and seen_cves.intersection(cve_ids):
                 continue
             affected_entries = vuln.get("affected")
             if not isinstance(affected_entries, list):
@@ -300,6 +357,7 @@ def sca_candidates(
                             outcome=outcome,
                             mapped=mapped,
                             kev_hit=False,
+                            epss=epss,
                             fresh=False,
                             status="needs-review",
                             note="version format not comparable to advisory range; verify manually",
@@ -308,11 +366,8 @@ def sca_candidates(
                     break
                 if not outcome.affected:
                     continue
-                kev_hit = any(
-                    alias in kev
-                    for alias in (vuln.get("aliases") or [])
-                    if isinstance(alias, str) and alias.startswith("CVE-")
-                )
+                seen_cves.update(cve_ids)
+                kev_hit = any(alias in kev for alias in cve_ids)
                 candidates.append(
                     _candidate(
                         dep=dep,
@@ -322,6 +377,7 @@ def sca_candidates(
                         outcome=outcome,
                         mapped=mapped,
                         kev_hit=kev_hit,
+                        epss=epss,
                         fresh=fresh,
                         status="confirmed" if fresh else "needs-review",
                         note=None,
@@ -334,6 +390,26 @@ def sca_candidates(
     return candidates, warnings
 
 
+def _epss_for(vuln: JsonMap, epss: dict[str, JsonMap]) -> JsonMap | None:
+    best: JsonMap | None = None
+    for cve in _cve_aliases(vuln):
+        entry = epss.get(cve)
+        if entry is None:
+            continue
+        score = entry.get("epss")
+        if not isinstance(score, (int, float)):
+            continue
+        if best is None or float(score) > float(best.get("epss", 0)):
+            best = {
+                "cve": cve,
+                "epss": float(score),
+                "percentile": float(entry["percentile"]) if isinstance(entry.get("percentile"), (int, float)) else None,
+                "date": entry.get("date"),
+                "source": "FIRST EPSS",
+            }
+    return best
+
+
 def _candidate(
     dep: JsonMap,
     source_file: str,
@@ -342,6 +418,7 @@ def _candidate(
     outcome: MatchOutcome,
     mapped: str,
     kev_hit: bool,
+    epss: dict[str, JsonMap],
     fresh: bool,
     status: str,
     note: str | None,
@@ -349,7 +426,8 @@ def _candidate(
     name = str(dep.get("name", "unknown"))
     version = str(dep.get("version", "?"))
     advisory_id = str(vuln.get("id", "unknown-advisory"))
-    severity = _advisory_severity(vuln)
+    assessed = advisory_severity(vuln)
+    severity = assessed.band
     escalation = ""
     if kev_hit and severity != "critical":
         severity = "critical"
@@ -358,6 +436,8 @@ def _candidate(
         escalation = "listed in CISA KEV catalog (already critical)"
     fixed_versions = outcome.fixed_versions
     recommended = _recommended_version(version, fixed_versions)
+    cwe = advisory_cwe(vuln)
+    epss_block = _epss_for(vuln, epss)
     candidate: JsonMap = {
         "matcher_id": f"sca-{mapped}-{name}".lower().replace(" ", "-")[:80],
         "rule_pack": "sca",
@@ -376,6 +456,7 @@ def _candidate(
         ),
         "category": "supply-chain",
         "severity_hint": severity,
+        "severity_basis": assessed.basis,
         "confidence_hint": "high" if status == "confirmed" else "medium",
         "status": status,
         "source": "advisory",
@@ -391,9 +472,20 @@ def _candidate(
             "recommended_version": recommended,
         },
         "sources": _source_citations(vuln),
+        "cwe": cwe,
+        "standards": standards_block(cwe, "", "", "supply-chain"),
         "fingerprint": fingerprint("sca", mapped, name, advisory_id),
         "fresh_advisory_data": fresh,
     }
+    if assessed.cvss:
+        candidate["cvss"] = assessed.cvss
+    if epss_block:
+        candidate["epss"] = epss_block
+    candidate.update(
+        advisory_priority_fields(
+            severity, kev_hit, epss_block["epss"] if epss_block else None, cwe
+        )
+    )
     if escalation:
         candidate["escalation_reason"] = escalation
     if fixed_versions:

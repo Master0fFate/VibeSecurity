@@ -1,9 +1,19 @@
 {
   "candidates": [
     {
-      "matcher_id": "missing-auth-route-candidate",
-      "path": "nextjs-bad-route/src/app/api/admin/users/route.ts",
-      "category": "authz"
+      "matcher_id": "ai-output-to-shell",
+      "path": "llm-tool-bad-shell/agent.py",
+      "category": "ai-agentic"
+    },
+    {
+      "matcher_id": "command-execution-sink",
+      "path": "llm-tool-bad-shell/agent.py",
+      "category": "injection"
+    },
+    {
+      "matcher_id": "github-actions-pr-target",
+      "path": "gha-bad-workflow/.github/workflows/pr.yml",
+      "category": "ci-cd"
     },
     {
       "matcher_id": "missing-auth-route-candidate",
@@ -11,14 +21,9 @@
       "category": "authz"
     },
     {
-      "matcher_id": "ai-output-to-shell",
-      "path": "llm-tool-bad-shell/agent.py",
-      "category": "ai-agentic"
-    },
-    {
-      "matcher_id": "github-actions-pr-target",
-      "path": "gha-bad-workflow/.github/workflows/pr.yml",
-      "category": "ci-cd"
+      "matcher_id": "missing-auth-route-candidate",
+      "path": "nextjs-bad-route/src/app/api/admin/users/route.ts",
+      "category": "authz"
     },
     {
       "matcher_id": "unpinned-github-action",

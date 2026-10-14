@@ -1,0 +1,603 @@
+{
+ "schema": "vibesecurity-asvs-subset/1",
+ "version": "5.0.0",
+ "source": "https://raw.githubusercontent.com/OWASP/ASVS/v5.0.0/5.0/docs_en/OWASP_Application_Security_Verification_Standard_5.0.0_en.flat.json",
+ "retrieved": "2026-10-14",
+ "license": "CC BY-SA 4.0 (OWASP ASVS)",
+ "note": "Requirement text is copied verbatim from the official OWASP ASVS 5.0.0 export. Only requirements referenced by VibeSecurity categories and matchers are included; the full standard has 345 requirements.",
+ "chapters": {
+  "V1": "Encoding and Sanitization",
+  "V2": "Validation and Business Logic",
+  "V3": "Web Frontend Security",
+  "V4": "API and Web Service",
+  "V5": "File Handling",
+  "V6": "Authentication",
+  "V7": "Session Management",
+  "V8": "Authorization",
+  "V9": "Self-contained Tokens",
+  "V10": "OAuth and OIDC",
+  "V11": "Cryptography",
+  "V12": "Secure Communication",
+  "V13": "Configuration",
+  "V14": "Data Protection",
+  "V15": "Secure Coding and Architecture",
+  "V16": "Security Logging and Error Handling",
+  "V17": "WebRTC"
+ },
+ "category_map": {
+  "authz": [
+   "V8.2.1",
+   "V8.2.2",
+   "V8.2.3",
+   "V8.3.1",
+   "V8.3.3",
+   "V3.5.1",
+   "V3.5.3",
+   "V3.3.2"
+  ],
+  "authn": [
+   "V6.3.1",
+   "V6.3.2",
+   "V6.3.4",
+   "V7.2.1",
+   "V7.2.2",
+   "V7.2.3",
+   "V9.1.1",
+   "V9.1.2",
+   "V9.1.3",
+   "V9.2.1",
+   "V9.2.3",
+   "V13.2.3"
+  ],
+  "injection": [
+   "V1.2.4",
+   "V1.2.5",
+   "V1.3.2",
+   "V1.3.7",
+   "V1.3.12",
+   "V1.5.1",
+   "V1.5.2",
+   "V5.2.2",
+   "V5.2.3",
+   "V5.2.5",
+   "V5.3.2",
+   "V5.3.3",
+   "V15.3.3",
+   "V15.3.6"
+  ],
+  "ssrf": [
+   "V1.3.6",
+   "V13.2.4",
+   "V13.2.5",
+   "V15.3.2",
+   "V3.7.2"
+  ],
+  "xss": [
+   "V1.2.1",
+   "V1.2.2",
+   "V1.2.3",
+   "V1.3.1",
+   "V1.3.5",
+   "V3.3.4"
+  ],
+  "secrets": [
+   "V13.3.1",
+   "V13.3.2",
+   "V13.3.4",
+   "V7.2.2",
+   "V14.2.1",
+   "V14.3.3",
+   "V16.2.5",
+   "V16.5.1"
+  ],
+  "crypto": [
+   "V11.2.1",
+   "V11.4.1",
+   "V11.4.2",
+   "V11.5.1",
+   "V12.1.1",
+   "V12.3.2",
+   "V12.3.4",
+   "V9.1.2"
+  ],
+  "privacy": [
+   "V14.2.3",
+   "V14.2.4",
+   "V14.2.6",
+   "V15.3.1",
+   "V16.2.5",
+   "V16.5.1"
+  ],
+  "supply-chain": [
+   "V15.2.1",
+   "V15.2.4",
+   "V15.2.5",
+   "V13.2.2"
+  ],
+  "ci-cd": [
+   "V13.2.2",
+   "V13.3.2",
+   "V13.4.1",
+   "V13.4.2",
+   "V15.2.3"
+  ],
+  "availability": [
+   "V2.4.1",
+   "V5.2.1",
+   "V5.2.3",
+   "V15.2.2",
+   "V16.5.2"
+  ],
+  "ai-agentic": [
+   "V2.2.2",
+   "V8.3.1",
+   "V8.3.3",
+   "V13.2.4",
+   "V15.2.4"
+  ],
+  "other": [
+   "V13.4.2",
+   "V13.4.5",
+   "V16.5.1",
+   "V2.2.2"
+  ]
+ },
+ "requirements": {
+  "V1.2.1": {
+   "level": "1",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.2 Injection Prevention",
+   "text": "Verify that output encoding for an HTTP response, HTML document, or XML document is relevant for the context required, such as encoding the relevant characters for HTML elements, HTML attributes, HTML comments, CSS, or HTTP header fields, to avoid changing the message or document structure."
+  },
+  "V1.2.2": {
+   "level": "1",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.2 Injection Prevention",
+   "text": "Verify that when dynamically building URLs, untrusted data is encoded according to its context (e.g., URL encoding or base64url encoding for query or path parameters). Ensure that only safe URL protocols are permitted (e.g., disallow javascript: or data:)."
+  },
+  "V1.2.3": {
+   "level": "1",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.2 Injection Prevention",
+   "text": "Verify that output encoding or escaping is used when dynamically building JavaScript content (including JSON), to avoid changing the message or document structure (to avoid JavaScript and JSON injection)."
+  },
+  "V1.2.4": {
+   "level": "1",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.2 Injection Prevention",
+   "text": "Verify that data selection or database queries (e.g., SQL, HQL, NoSQL, Cypher) use parameterized queries, ORMs, entity frameworks, or are otherwise protected from SQL Injection and other database injection attacks. This is also relevant when writing stored procedures."
+  },
+  "V1.2.5": {
+   "level": "1",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.2 Injection Prevention",
+   "text": "Verify that the application protects against OS command injection and that operating system calls use parameterized OS queries or use contextual command line output encoding."
+  },
+  "V1.3.1": {
+   "level": "1",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.3 Sanitization",
+   "text": "Verify that all untrusted HTML input from WYSIWYG editors or similar is sanitized using a well-known and secure HTML sanitization library or framework feature."
+  },
+  "V1.3.2": {
+   "level": "1",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.3 Sanitization",
+   "text": "Verify that the application avoids the use of eval() or other dynamic code execution features such as Spring Expression Language (SpEL). Where there is no alternative, any user input being included must be sanitized before being executed."
+  },
+  "V1.3.5": {
+   "level": "2",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.3 Sanitization",
+   "text": "Verify that the application sanitizes or disables user-supplied scriptable or expression template language content, such as Markdown, CSS or XSL stylesheets, BBCode, or similar."
+  },
+  "V1.3.6": {
+   "level": "2",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.3 Sanitization",
+   "text": "Verify that the application protects against Server-side Request Forgery (SSRF) attacks, by validating untrusted data against an allowlist of protocols, domains, paths and ports and sanitizing potentially dangerous characters before using the data to call another service."
+  },
+  "V1.3.7": {
+   "level": "2",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.3 Sanitization",
+   "text": "Verify that the application protects against template injection attacks by not allowing templates to be built based on untrusted input. Where there is no alternative, any untrusted input being included dynamically during template creation must be sanitized or strictly validated."
+  },
+  "V1.3.12": {
+   "level": "3",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.3 Sanitization",
+   "text": "Verify that regular expressions are free from elements causing exponential backtracking, and ensure untrusted input is sanitized to mitigate ReDoS or Runaway Regex attacks."
+  },
+  "V1.5.1": {
+   "level": "1",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.5 Safe Deserialization",
+   "text": "Verify that the application configures XML parsers to use a restrictive configuration and that unsafe features such as resolving external entities are disabled to prevent XML eXternal Entity (XXE) attacks."
+  },
+  "V1.5.2": {
+   "level": "2",
+   "chapter": "V1 Encoding and Sanitization",
+   "section": "V1.5 Safe Deserialization",
+   "text": "Verify that deserialization of untrusted data enforces safe input handling, such as using an allowlist of object types or restricting client-defined object types, to prevent deserialization attacks. Deserialization mechanisms that are explicitly defined as insecure must not be used with untrusted input."
+  },
+  "V2.2.2": {
+   "level": "1",
+   "chapter": "V2 Validation and Business Logic",
+   "section": "V2.2 Input Validation",
+   "text": "Verify that the application is designed to enforce input validation at a trusted service layer. While client-side validation improves usability and should be encouraged, it must not be relied upon as a security control."
+  },
+  "V2.4.1": {
+   "level": "2",
+   "chapter": "V2 Validation and Business Logic",
+   "section": "V2.4 Anti-automation",
+   "text": "Verify that anti-automation controls are in place to protect against excessive calls to application functions that could lead to data exfiltration, garbage-data creation, quota exhaustion, rate-limit breaches, denial-of-service, or overuse of costly resources."
+  },
+  "V3.3.2": {
+   "level": "2",
+   "chapter": "V3 Web Frontend Security",
+   "section": "V3.3 Cookie Setup",
+   "text": "Verify that each cookie's 'SameSite' attribute value is set according to the purpose of the cookie, to limit exposure to user interface redress attacks and browser-based request forgery attacks, commonly known as cross-site request forgery (CSRF)."
+  },
+  "V3.3.4": {
+   "level": "2",
+   "chapter": "V3 Web Frontend Security",
+   "section": "V3.3 Cookie Setup",
+   "text": "Verify that if the value of a cookie is not meant to be accessible to client-side scripts (such as a session token), the cookie must have the 'HttpOnly' attribute set and the same value (e. g. session token) must only be transferred to the client via the 'Set-Cookie' header field."
+  },
+  "V3.5.1": {
+   "level": "1",
+   "chapter": "V3 Web Frontend Security",
+   "section": "V3.5 Browser Origin Separation",
+   "text": "Verify that, if the application does not rely on the CORS preflight mechanism to prevent disallowed cross-origin requests to use sensitive functionality, these requests are validated to ensure they originate from the application itself. This may be done by using and validating anti-forgery tokens or requiring extra HTTP header fields that are not CORS-safelisted request-header fields. This is to defend against browser-based request forgery attacks, commonly known as cross-site request forgery (CSRF)."
+  },
+  "V3.5.3": {
+   "level": "1",
+   "chapter": "V3 Web Frontend Security",
+   "section": "V3.5 Browser Origin Separation",
+   "text": "Verify that HTTP requests to sensitive functionality use appropriate HTTP methods such as POST, PUT, PATCH, or DELETE, and not methods defined by the HTTP specification as \"safe\" such as HEAD, OPTIONS, or GET. Alternatively, strict validation of the Sec-Fetch-* request header fields can be used to ensure that the request did not originate from an inappropriate cross-origin call, a navigation request, or a resource load (such as an image source) where this is not expected."
+  },
+  "V3.7.2": {
+   "level": "2",
+   "chapter": "V3 Web Frontend Security",
+   "section": "V3.7 Other Browser Security Considerations",
+   "text": "Verify that the application will only automatically redirect the user to a different hostname or domain (which is not controlled by the application) where the destination appears on an allowlist."
+  },
+  "V5.2.1": {
+   "level": "1",
+   "chapter": "V5 File Handling",
+   "section": "V5.2 File Upload and Content",
+   "text": "Verify that the application will only accept files of a size which it can process without causing a loss of performance or a denial of service attack."
+  },
+  "V5.2.2": {
+   "level": "1",
+   "chapter": "V5 File Handling",
+   "section": "V5.2 File Upload and Content",
+   "text": "Verify that when the application accepts a file, either on its own or within an archive such as a zip file, it checks if the file extension matches an expected file extension and validates that the contents correspond to the type represented by the extension. This includes, but is not limited to, checking the initial 'magic bytes', performing image re-writing, and using specialized libraries for file content validation. For L1, this can focus just on files which are used to make specific business or security decisions. For L2 and up, this must apply to all files being accepted."
+  },
+  "V5.2.3": {
+   "level": "2",
+   "chapter": "V5 File Handling",
+   "section": "V5.2 File Upload and Content",
+   "text": "Verify that the application checks compressed files (e.g., zip, gz, docx, odt) against maximum allowed uncompressed size and against maximum number of files before uncompressing the file."
+  },
+  "V5.2.5": {
+   "level": "3",
+   "chapter": "V5 File Handling",
+   "section": "V5.2 File Upload and Content",
+   "text": "Verify that the application does not allow uploading compressed files containing symlinks unless this is specifically required (in which case it will be necessary to enforce an allowlist of the files that can be symlinked to)."
+  },
+  "V5.3.2": {
+   "level": "1",
+   "chapter": "V5 File Handling",
+   "section": "V5.3 File Storage",
+   "text": "Verify that when the application creates file paths for file operations, instead of user-submitted filenames, it uses internally generated or trusted data, or if user-submitted filenames or file metadata must be used, strict validation and sanitization must be applied. This is to protect against path traversal, local or remote file inclusion (LFI, RFI), and server-side request forgery (SSRF) attacks."
+  },
+  "V5.3.3": {
+   "level": "3",
+   "chapter": "V5 File Handling",
+   "section": "V5.3 File Storage",
+   "text": "Verify that server-side file processing, such as file decompression, ignores user-provided path information to prevent vulnerabilities such as zip slip."
+  },
+  "V6.3.1": {
+   "level": "1",
+   "chapter": "V6 Authentication",
+   "section": "V6.3 General Authentication Security",
+   "text": "Verify that controls to prevent attacks such as credential stuffing and password brute force are implemented according to the application's security documentation."
+  },
+  "V6.3.2": {
+   "level": "1",
+   "chapter": "V6 Authentication",
+   "section": "V6.3 General Authentication Security",
+   "text": "Verify that default user accounts (e.g., \"root\", \"admin\", or \"sa\") are not present in the application or are disabled."
+  },
+  "V6.3.4": {
+   "level": "2",
+   "chapter": "V6 Authentication",
+   "section": "V6.3 General Authentication Security",
+   "text": "Verify that, if the application includes multiple authentication pathways, there are no undocumented pathways and that security controls and authentication strength are enforced consistently."
+  },
+  "V7.2.1": {
+   "level": "1",
+   "chapter": "V7 Session Management",
+   "section": "V7.2 Fundamental Session Management Security",
+   "text": "Verify that the application performs all session token verification using a trusted, backend service."
+  },
+  "V7.2.2": {
+   "level": "1",
+   "chapter": "V7 Session Management",
+   "section": "V7.2 Fundamental Session Management Security",
+   "text": "Verify that the application uses either self-contained or reference tokens that are dynamically generated for session management, i.e. not using static API secrets and keys."
+  },
+  "V7.2.3": {
+   "level": "1",
+   "chapter": "V7 Session Management",
+   "section": "V7.2 Fundamental Session Management Security",
+   "text": "Verify that if reference tokens are used to represent user sessions, they are unique and generated using a cryptographically secure pseudo-random number generator (CSPRNG) and possess at least 128 bits of entropy."
+  },
+  "V8.2.1": {
+   "level": "1",
+   "chapter": "V8 Authorization",
+   "section": "V8.2 General Authorization Design",
+   "text": "Verify that the application ensures that function-level access is restricted to consumers with explicit permissions."
+  },
+  "V8.2.2": {
+   "level": "1",
+   "chapter": "V8 Authorization",
+   "section": "V8.2 General Authorization Design",
+   "text": "Verify that the application ensures that data-specific access is restricted to consumers with explicit permissions to specific data items to mitigate insecure direct object reference (IDOR) and broken object level authorization (BOLA)."
+  },
+  "V8.2.3": {
+   "level": "2",
+   "chapter": "V8 Authorization",
+   "section": "V8.2 General Authorization Design",
+   "text": "Verify that the application ensures that field-level access is restricted to consumers with explicit permissions to specific fields to mitigate broken object property level authorization (BOPLA)."
+  },
+  "V8.3.1": {
+   "level": "1",
+   "chapter": "V8 Authorization",
+   "section": "V8.3 Operation Level Authorization",
+   "text": "Verify that the application enforces authorization rules at a trusted service layer and doesn't rely on controls that an untrusted consumer could manipulate, such as client-side JavaScript."
+  },
+  "V8.3.3": {
+   "level": "3",
+   "chapter": "V8 Authorization",
+   "section": "V8.3 Operation Level Authorization",
+   "text": "Verify that access to an object is based on the originating subject's (e.g. consumer's) permissions, not on the permissions of any intermediary or service acting on their behalf. For example, if a consumer calls a web service using a self-contained token for authentication, and the service then requests data from a different service, the second service will use the consumer's token, rather than a machine-to-machine token from the first service, to make permission decisions."
+  },
+  "V9.1.1": {
+   "level": "1",
+   "chapter": "V9 Self-contained Tokens",
+   "section": "V9.1 Token source and integrity",
+   "text": "Verify that self-contained tokens are validated using their digital signature or MAC to protect against tampering before accepting the token's contents."
+  },
+  "V9.1.2": {
+   "level": "1",
+   "chapter": "V9 Self-contained Tokens",
+   "section": "V9.1 Token source and integrity",
+   "text": "Verify that only algorithms on an allowlist can be used to create and verify self-contained tokens, for a given context. The allowlist must include the permitted algorithms, ideally only either symmetric or asymmetric algorithms, and must not include the 'None' algorithm. If both symmetric and asymmetric must be supported, additional controls will be needed to prevent key confusion."
+  },
+  "V9.1.3": {
+   "level": "1",
+   "chapter": "V9 Self-contained Tokens",
+   "section": "V9.1 Token source and integrity",
+   "text": "Verify that key material that is used to validate self-contained tokens is from trusted pre-configured sources for the token issuer, preventing attackers from specifying untrusted sources and keys. For JWTs and other JWS structures, headers such as 'jku', 'x5u', and 'jwk' must be validated against an allowlist of trusted sources."
+  },
+  "V9.2.1": {
+   "level": "1",
+   "chapter": "V9 Self-contained Tokens",
+   "section": "V9.2 Token content",
+   "text": "Verify that, if a validity time span is present in the token data, the token and its content are accepted only if the verification time is within this validity time span. For example, for JWTs, the claims 'nbf' and 'exp' must be verified."
+  },
+  "V9.2.3": {
+   "level": "2",
+   "chapter": "V9 Self-contained Tokens",
+   "section": "V9.2 Token content",
+   "text": "Verify that the service only accepts tokens which are intended for use with that service (audience). For JWTs, this can be achieved by validating the 'aud' claim against an allowlist defined in the service."
+  },
+  "V11.2.1": {
+   "level": "2",
+   "chapter": "V11 Cryptography",
+   "section": "V11.2 Secure Cryptography Implementation",
+   "text": "Verify that industry-validated implementations (including libraries and hardware-accelerated implementations) are used for cryptographic operations."
+  },
+  "V11.4.1": {
+   "level": "1",
+   "chapter": "V11 Cryptography",
+   "section": "V11.4 Hashing and Hash-based Functions",
+   "text": "Verify that only approved hash functions are used for general cryptographic use cases, including digital signatures, HMAC, KDF, and random bit generation. Disallowed hash functions, such as MD5, must not be used for any cryptographic purpose."
+  },
+  "V11.4.2": {
+   "level": "2",
+   "chapter": "V11 Cryptography",
+   "section": "V11.4 Hashing and Hash-based Functions",
+   "text": "Verify that passwords are stored using an approved, computationally intensive, key derivation function (also known as a \"password hashing function\"), with parameter settings configured based on current guidance. The settings should balance security and performance to make brute-force attacks sufficiently challenging for the required level of security."
+  },
+  "V11.5.1": {
+   "level": "2",
+   "chapter": "V11 Cryptography",
+   "section": "V11.5 Random Values",
+   "text": "Verify that all random numbers and strings which are intended to be non-guessable must be generated using a cryptographically secure pseudo-random number generator (CSPRNG) and have at least 128 bits of entropy. Note that UUIDs do not respect this condition."
+  },
+  "V12.1.1": {
+   "level": "1",
+   "chapter": "V12 Secure Communication",
+   "section": "V12.1 General TLS Security Guidance",
+   "text": "Verify that only the latest recommended versions of the TLS protocol are enabled, such as TLS 1.2 and TLS 1.3. The latest version of the TLS protocol must be the preferred option."
+  },
+  "V12.3.2": {
+   "level": "2",
+   "chapter": "V12 Secure Communication",
+   "section": "V12.3 General Service to Service Communication Security",
+   "text": "Verify that TLS clients validate certificates received before communicating with a TLS server."
+  },
+  "V12.3.4": {
+   "level": "2",
+   "chapter": "V12 Secure Communication",
+   "section": "V12.3 General Service to Service Communication Security",
+   "text": "Verify that TLS connections between internal services use trusted certificates. Where internally generated or self-signed certificates are used, the consuming service must be configured to only trust specific internal CAs and specific self-signed certificates."
+  },
+  "V13.2.2": {
+   "level": "2",
+   "chapter": "V13 Configuration",
+   "section": "V13.2 Backend Communication Configuration",
+   "text": "Verify that communications between backend application components, including local or operating system services, APIs, middleware, and data layers, are performed with accounts assigned the least necessary privileges."
+  },
+  "V13.2.3": {
+   "level": "2",
+   "chapter": "V13 Configuration",
+   "section": "V13.2 Backend Communication Configuration",
+   "text": "Verify that if a credential has to be used for service authentication, the credential being used by the consumer is not a default credential (e.g., root/root or admin/admin)."
+  },
+  "V13.2.4": {
+   "level": "2",
+   "chapter": "V13 Configuration",
+   "section": "V13.2 Backend Communication Configuration",
+   "text": "Verify that an allowlist is used to define the external resources or systems with which the application is permitted to communicate (e.g., for outbound requests, data loads, or file access). This allowlist can be implemented at the application layer, web server, firewall, or a combination of different layers."
+  },
+  "V13.2.5": {
+   "level": "2",
+   "chapter": "V13 Configuration",
+   "section": "V13.2 Backend Communication Configuration",
+   "text": "Verify that the web or application server is configured with an allowlist of resources or systems to which the server can send requests or load data or files from."
+  },
+  "V13.3.1": {
+   "level": "2",
+   "chapter": "V13 Configuration",
+   "section": "V13.3 Secret Management",
+   "text": "Verify that a secrets management solution, such as a key vault, is used to securely create, store, control access to, and destroy backend secrets. These could include passwords, key material, integrations with databases and third-party systems, keys and seeds for time-based tokens, other internal secrets, and API keys. Secrets must not be included in application source code or included in build artifacts. For an L3 application, this must involve a hardware-backed solution such as an HSM."
+  },
+  "V13.3.2": {
+   "level": "2",
+   "chapter": "V13 Configuration",
+   "section": "V13.3 Secret Management",
+   "text": "Verify that access to secret assets adheres to the principle of least privilege."
+  },
+  "V13.3.4": {
+   "level": "3",
+   "chapter": "V13 Configuration",
+   "section": "V13.3 Secret Management",
+   "text": "Verify that secrets are configured to expire and be rotated based on the application's documentation."
+  },
+  "V13.4.1": {
+   "level": "1",
+   "chapter": "V13 Configuration",
+   "section": "V13.4 Unintended Information Leakage",
+   "text": "Verify that the application is deployed either without any source control metadata, including the .git or .svn folders, or in a way that these folders are inaccessible both externally and to the application itself."
+  },
+  "V13.4.2": {
+   "level": "2",
+   "chapter": "V13 Configuration",
+   "section": "V13.4 Unintended Information Leakage",
+   "text": "Verify that debug modes are disabled for all components in production environments to prevent exposure of debugging features and information leakage."
+  },
+  "V13.4.5": {
+   "level": "2",
+   "chapter": "V13 Configuration",
+   "section": "V13.4 Unintended Information Leakage",
+   "text": "Verify that documentation (such as for internal APIs) and monitoring endpoints are not exposed unless explicitly intended."
+  },
+  "V14.2.1": {
+   "level": "1",
+   "chapter": "V14 Data Protection",
+   "section": "V14.2 General Data Protection",
+   "text": "Verify that sensitive data is only sent to the server in the HTTP message body or header fields, and that the URL and query string do not contain sensitive information, such as an API key or session token."
+  },
+  "V14.2.3": {
+   "level": "2",
+   "chapter": "V14 Data Protection",
+   "section": "V14.2 General Data Protection",
+   "text": "Verify that defined sensitive data is not sent to untrusted parties (e.g., user trackers) to prevent unwanted collection of data outside of the application's control."
+  },
+  "V14.2.4": {
+   "level": "2",
+   "chapter": "V14 Data Protection",
+   "section": "V14.2 General Data Protection",
+   "text": "Verify that controls around sensitive data related to encryption, integrity verification, retention, how the data is to be logged, access controls around sensitive data in logs, privacy and privacy-enhancing technologies, are implemented as defined in the documentation for the specific data's protection level."
+  },
+  "V14.2.6": {
+   "level": "3",
+   "chapter": "V14 Data Protection",
+   "section": "V14.2 General Data Protection",
+   "text": "Verify that the application only returns the minimum required sensitive data for the application's functionality. For example, only returning some of the digits of a credit card number and not the full number. If the complete data is required, it should be masked in the user interface unless the user specifically views it."
+  },
+  "V14.3.3": {
+   "level": "2",
+   "chapter": "V14 Data Protection",
+   "section": "V14.3 Client-side Data Protection",
+   "text": "Verify that data stored in browser storage (such as localStorage, sessionStorage, IndexedDB, or cookies) does not contain sensitive data, with the exception of session tokens."
+  },
+  "V15.2.1": {
+   "level": "1",
+   "chapter": "V15 Secure Coding and Architecture",
+   "section": "V15.2 Security Architecture and Dependencies",
+   "text": "Verify that the application only contains components which have not breached the documented update and remediation time frames."
+  },
+  "V15.2.2": {
+   "level": "2",
+   "chapter": "V15 Secure Coding and Architecture",
+   "section": "V15.2 Security Architecture and Dependencies",
+   "text": "Verify that the application has implemented defenses against loss of availability due to functionality which is time-consuming or resource-demanding, based on the documented security decisions and strategies for this."
+  },
+  "V15.2.3": {
+   "level": "2",
+   "chapter": "V15 Secure Coding and Architecture",
+   "section": "V15.2 Security Architecture and Dependencies",
+   "text": "Verify that the production environment only includes functionality that is required for the application to function, and does not expose extraneous functionality such as test code, sample snippets, and development functionality."
+  },
+  "V15.2.4": {
+   "level": "3",
+   "chapter": "V15 Secure Coding and Architecture",
+   "section": "V15.2 Security Architecture and Dependencies",
+   "text": "Verify that third-party components and all of their transitive dependencies are included from the expected repository, whether internally owned or an external source, and that there is no risk of a dependency confusion attack."
+  },
+  "V15.2.5": {
+   "level": "3",
+   "chapter": "V15 Secure Coding and Architecture",
+   "section": "V15.2 Security Architecture and Dependencies",
+   "text": "Verify that the application implements additional protections around parts of the application which are documented as containing \"dangerous functionality\" or using third-party libraries considered to be \"risky components\". This could include techniques such as sandboxing, encapsulation, containerization or network level isolation to delay and deter attackers who compromise one part of an application from pivoting elsewhere in the application."
+  },
+  "V15.3.1": {
+   "level": "1",
+   "chapter": "V15 Secure Coding and Architecture",
+   "section": "V15.3 Defensive Coding",
+   "text": "Verify that the application only returns the required subset of fields from a data object. For example, it should not return an entire data object, as some individual fields should not be accessible to users."
+  },
+  "V15.3.2": {
+   "level": "2",
+   "chapter": "V15 Secure Coding and Architecture",
+   "section": "V15.3 Defensive Coding",
+   "text": "Verify that where the application backend makes calls to external URLs, it is configured to not follow redirects unless it is intended functionality."
+  },
+  "V15.3.3": {
+   "level": "2",
+   "chapter": "V15 Secure Coding and Architecture",
+   "section": "V15.3 Defensive Coding",
+   "text": "Verify that the application has countermeasures to protect against mass assignment attacks by limiting allowed fields per controller and action, e.g., it is not possible to insert or update a field value when it was not intended to be part of that action."
+  },
+  "V15.3.6": {
+   "level": "2",
+   "chapter": "V15 Secure Coding and Architecture",
+   "section": "V15.3 Defensive Coding",
+   "text": "Verify that JavaScript code is written in a way that prevents prototype pollution, for example, by using Set() or Map() instead of object literals."
+  },
+  "V16.2.5": {
+   "level": "2",
+   "chapter": "V16 Security Logging and Error Handling",
+   "section": "V16.2 General Logging",
+   "text": "Verify that when logging sensitive data, the application enforces logging based on the data's protection level. For example, it may not be allowed to log certain data, such as credentials or payment details. Other data, such as session tokens, may only be logged by being hashed or masked, either in full or partially."
+  },
+  "V16.5.1": {
+   "level": "2",
+   "chapter": "V16 Security Logging and Error Handling",
+   "section": "V16.5 Error Handling",
+   "text": "Verify that a generic message is returned to the consumer when an unexpected or security-sensitive error occurs, ensuring no exposure of sensitive internal system data such as stack traces, queries, secret keys, and tokens."
+  },
+  "V16.5.2": {
+   "level": "2",
+   "chapter": "V16 Security Logging and Error Handling",
+   "section": "V16.5 Error Handling",
+   "text": "Verify that the application continues to operate securely when external resource access fails, for example, by using patterns such as circuit breakers or graceful degradation."
+  }
+ }
+}

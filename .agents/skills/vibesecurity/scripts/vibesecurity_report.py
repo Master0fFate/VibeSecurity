@@ -15,6 +15,7 @@ from vibesecurity_common import (
     visible_text,
 )
 from vibesecurity_report_context import render_coverage_notes, render_scope
+from vibesecurity_standards import render_standards_line, standards_block
 
 RESOLVED_STATUSES = {"fixed", "wont-fix", "false-positive"}
 
@@ -183,20 +184,34 @@ def standards_field(item: JsonMap) -> str:
         ]
         if values:
             return ", ".join(values)
-    category = text_field(item, "category", "other")
-    return {
-        "authz": "OWASP ASVS 5.0 V8",
-        "authn": "OWASP ASVS 5.0 V6",
-        "injection": "OWASP ASVS 5.0 V1",
-        "ssrf": "OWASP ASVS 5.0 V4",
-        "xss": "OWASP ASVS 5.0 V1/V3",
-        "secrets": "OWASP ASVS 5.0 V13",
-        "privacy": "OWASP ASVS 5.0 V14",
-        "crypto": "OWASP ASVS 5.0 V11/V12",
-        "supply-chain": "NIST SSDF / SLSA",
-        "ci-cd": "NIST SSDF / SLSA",
-        "ai-agentic": "OWASP LLM Top 10 / Agentic Top 10",
-    }.get(category, "Not mapped")
+    block = item.get("standards")
+    if not isinstance(block, dict):
+        block = standards_block(
+            text_field(item, "cwe", ""),
+            text_field(item, "owasp", ""),
+            text_field(item, "asvs", ""),
+            text_field(item, "category", "other"),
+        )
+    rendered = render_standards_line(block)
+    return markdown_text(visible_text(rendered, 600)) if rendered else "Not mapped"
+
+
+def exploit_intelligence_lines(item: JsonMap) -> list[str]:
+    lines: list[str] = []
+    cvss = item.get("cvss")
+    if isinstance(cvss, dict) and isinstance(cvss.get("base_score"), (int, float)):
+        lines.append(f"- CVSS {cvss.get('version', '3.x')} base score: {cvss['base_score']}")
+    epss = item.get("epss")
+    if isinstance(epss, dict) and isinstance(epss.get("epss"), (int, float)):
+        percentile = epss.get("percentile")
+        suffix = f" (percentile {percentile:.2f})" if isinstance(percentile, (int, float)) else ""
+        lines.append(f"- EPSS exploitation probability: {epss['epss']:.3f}{suffix}")
+    if item.get("kev") is True:
+        lines.append("- CISA KEV: listed as known exploited")
+    basis = item.get("severity_basis")
+    if isinstance(basis, str) and basis:
+        lines.append(f"- Severity basis: {markdown_text(visible_text(basis, 200))}")
+    return lines
 
 
 def category_summary(sections: ReportSections) -> str:
@@ -257,6 +272,7 @@ def render_items(lines: list[str], group: RenderGroup) -> int:
                 f"- Status: {safe_text_field(item, 'status', 'needs-review')}",
                 f"- Affected files: {lines_field(item)}",
                 f"- Standards: {standards_field(item)}",
+                *exploit_intelligence_lines(item),
                 "",
                 "**Evidence**",
                 "",

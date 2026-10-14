@@ -4,9 +4,11 @@ from pathlib import Path
 from typing import Final
 
 from vibesecurity_common import JsonMap, JsonValue, VIBESEC_VERSION
+from vibesecurity_standards import split_ids
 
 SARIF_SCHEMA: Final = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
 SARIF_VERSION: Final = "2.1.0"
+CWE_HELP_URL: Final = "https://cwe.mitre.org/data/definitions/{number}.html"
 SEVERITY_TO_LEVEL: Final = {
     "critical": "error",
     "high": "error",
@@ -63,6 +65,10 @@ def _result_fingerprints(item: JsonMap) -> JsonMap:
     return partial
 
 
+def _cwe_ids(item: JsonMap) -> list[str]:
+    return split_ids(_text(item.get("cwe")))
+
+
 def _result_properties(item: JsonMap) -> JsonMap:
     properties: JsonMap = {
         "vibesecurityStatus": _text(item.get("status"), "needs-review"),
@@ -73,10 +79,31 @@ def _result_properties(item: JsonMap) -> JsonMap:
         properties["vibesecurityAdvisoryIds"] = [
             value for value in advisory_ids if isinstance(value, str)
         ][:8]
-    kev = item.get("kev")
-    if kev is True:
+    if item.get("kev") is True:
         properties["vibesecurityKev"] = True
+    cwe_ids = _cwe_ids(item)
+    if cwe_ids:
+        properties["vibesecurityCwe"] = cwe_ids
+    epss = item.get("epss")
+    if isinstance(epss, dict) and isinstance(epss.get("epss"), (int, float)):
+        properties["vibesecurityEpss"] = epss["epss"]
+    cvss = item.get("cvss")
+    if isinstance(cvss, dict) and isinstance(cvss.get("base_score"), (int, float)):
+        properties["vibesecurityCvssBaseScore"] = cvss["base_score"]
     return properties
+
+
+def _rule(item: JsonMap) -> JsonMap:
+    rule: JsonMap = {"id": _rule_id(item), "name": _rule_name(item)}
+    reason = _text(item.get("reason"))
+    if reason:
+        rule["shortDescription"] = {"text": reason[:500]}
+    cwe_ids = _cwe_ids(item)
+    tags = ["security", *(f"external/cwe/{cwe_id.lower()}" for cwe_id in cwe_ids)]
+    rule["properties"] = {"tags": tags}
+    if cwe_ids:
+        rule["helpUri"] = CWE_HELP_URL.format(number=cwe_ids[0].split("-", 1)[1])
+    return rule
 
 
 def sarif_from_items(items: list[JsonMap], project: JsonMap | None = None) -> JsonMap:
@@ -88,7 +115,7 @@ def sarif_from_items(items: list[JsonMap], project: JsonMap | None = None) -> Js
         rule_id = _rule_id(item)
         if rule_id not in rule_ids_seen:
             rule_ids_seen.add(rule_id)
-            rules.append({"id": rule_id, "name": _rule_name(item)})
+            rules.append(_rule(item))
         result: JsonMap = {
             "ruleId": rule_id,
             "level": _result_level(item),

@@ -20,9 +20,7 @@ dist/
 .env.*
 !.env.example
 
-# Generated VibeSecurity and local-tool state
-# (.vibesecurity/ also holds the future advisory cache from the enterprise program's
-#  `feed` subcommand — see docs/ENTERPRISE-UPGRADE-PROGRAM.md, item A1)
+# Generated VibeSecurity and local-tool state (findings, advisory cache, baselines)
 .vibesecurity/
 /skills-lock.json
 .vibesec/
@@ -40,5 +38,3 @@ Desktop.ini
 vibesec-skill-conceptualization-plan.md
 vibesecurity-review.md
 vibesecurity-pressure-points-report.md
-docs/ENTERPRISE-UPGRADE-PROGRAM.md
-docs/RELEASE-CHECKLIST.md

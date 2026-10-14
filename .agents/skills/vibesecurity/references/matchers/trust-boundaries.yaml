@@ -1,167 +1,235 @@
-- id: disabled-tls-verification
-  category: crypto
+# VibeSecurity CI/CD and infrastructure trust-boundary matchers.
+# Restricted YAML subset; see high-signal.yaml for field semantics.
+
+- id: github-actions-pr-target
+  category: ci-cd
   severity_hint: high
   confidence_hint: high
+  cwe: "CWE-829"
+  owasp: "A08:2025"
+  asvs: "V13.2.2, V15.2.3"
   globs:
-    - "**/*.py"
-    - "**/*.js"
-    - "**/*.ts"
-    - "**/*.go"
-    - "**/*.rb"
-    - "**/*.java"
-    - "**/*.cs"
-    - "**/*.php"
+    - "**/.github/workflows/*.yml"
+    - "**/.github/workflows/*.yaml"
   patterns:
-    - "verify=False"
-    - "verify = False"
-    - "rejectUnauthorized: false"
-    - "rejectUnauthorized = false"
-    - "InsecureSkipVerify: true"
-    - "NODE_TLS_REJECT_UNAUTHORIZED"
-    - "CURLOPT_SSL_VERIFYPEER"
-    - "ServerCertificateCustomValidationCallback"
-  reason: "TLS certificate or hostname verification may be disabled."
-  review_prompt: "Confirm the code is reachable outside an isolated test and restore fail-closed certificate and hostname verification."
-- id: token-signature-bypass
-  category: authn
+    - "pull_request_target"
+  nearby_terms:
+    - "checkout"
+    - "run:"
+    - "npm"
+    - "pnpm"
+    - "yarn"
+    - "pip"
+    - "make"
+    - "head.sha"
+    - "head.ref"
+  reason: "A pull_request_target workflow runs with the base repository's secrets and write token; checking out or executing fork code there hands those to the contributor."
+  review_prompt: "Confirm whether attacker-controlled code or build scripts run with a trusted token or secrets; split untrusted validation into a pull_request workflow."
+  positive_examples:
+    - "on: pull_request_target  # then checkout head.sha and run: npm test"
+  negative_examples:
+    - "on: pull_request"
+- id: github-actions-script-injection
+  category: ci-cd
   severity_hint: critical
   confidence_hint: high
+  cwe: "CWE-78"
+  owasp: "A05:2025"
+  asvs: "V1.2.5, V13.2.2"
   globs:
-    - "**/*.py"
-    - "**/*.js"
-    - "**/*.ts"
-    - "**/*.go"
-    - "**/*.rb"
-    - "**/*.java"
-    - "**/*.cs"
-    - "**/*.php"
-  patterns:
-    - "verify_signature: false"
-    - '"verify_signature": false'
-    - "verify_signature': false"
-    - "algorithms: [none]"
-    - 'algorithms: ["none"]'
-    - "algorithms=['none']"
-    - "alg: none"
-    - "WithoutClaimsValidation"
+    - "**/.github/workflows/*.yml"
+    - "**/.github/workflows/*.yaml"
+  regex_patterns:
+    - "\$\{\{\s*github\.(?:head_ref|event\.(?:issue|pull_request|comment|review|review_comment|discussion|head_commit|commits|workflow_run|inputs)\b[^}]*)\s*\}\}"
   nearby_terms:
-    - "jwt"
-    - "token"
-    - "signature"
-    - "algorithm"
-  reason: "Token verification may accept unsigned tokens or bypass signature or claims checks."
-  review_prompt: "Trace the authentication path and require an allowlisted algorithm, trusted key, signature, issuer, audience, and time-claim validation."
-- id: weak-security-randomness
-  category: crypto
+    - "run:"
+    - "script:"
+  reason: "An attacker-controlled GitHub event field (title, body, branch name, commit message) is interpolated directly into a shell or script step, which is the documented GitHub Actions script-injection pattern."
+  review_prompt: "Pass the value through an env: variable and quote it in the shell, or use an action input; never interpolate event text into run: scripts."
+  positive_examples:
+    - "run: echo \"PR title: ${{ github.event.pull_request.title }}\""
+    - "run: git checkout ${{ github.head_ref }}"
+  negative_examples:
+    - "with: ${{ github.event.pull_request.number }}"
+    - "run: echo \"$PR_TITLE\""
+- id: github-actions-broad-permissions
+  category: ci-cd
   severity_hint: high
   confidence_hint: medium
+  cwe: "CWE-250"
+  owasp: "A08:2025"
+  asvs: "V13.2.2, V13.3.2"
   globs:
-    - "**/*.js"
-    - "**/*.ts"
-    - "**/*.py"
-    - "**/*.java"
-    - "**/*.cs"
-    - "**/*.php"
-    - "**/*.rb"
+    - "**/.github/workflows/*.yml"
+    - "**/.github/workflows/*.yaml"
   patterns:
-    - "Math.random("
-    - "random.random("
-    - "new Random("
-    - "System.Random("
-    - "mt_rand("
-    - "rand("
+    - "write-all"
+    - "contents: write"
+    - "actions: write"
+    - "packages: write"
+    - "id-token: write"
+    - "pull-requests: write"
+    - "deployments: write"
   nearby_terms:
-    - "token"
-    - "secret"
-    - "password"
-    - "reset"
-    - "session"
-    - "nonce"
-    - "otp"
-  reason: "A security-sensitive value may use a predictable random-number generator."
-  review_prompt: "Confirm the value protects a security boundary and replace predictable randomness with the platform CSPRNG."
-- id: sensitive-data-logging
-  category: privacy
+    - "permissions:"
+    - "pull_request"
+    - "issue"
+    - "deploy"
+    - "release"
+    - "publish"
+  reason: "Workflow token permissions may exceed what the job needs; a compromised step or action can then push code, publish packages, or mint OIDC identities."
+  review_prompt: "Confirm each write or OIDC permission is required by a specific step and cannot be reached from untrusted event data or third-party actions."
+  positive_examples:
+    - "permissions: write-all"
+  negative_examples:
+    - "permissions: { contents: read }"
+- id: gitlab-ci-secret-boundary
+  category: ci-cd
   severity_hint: high
   confidence_hint: medium
+  cwe: "CWE-522"
+  owasp: "A08:2025"
+  asvs: "V13.2.2, V13.3.2"
   globs:
-    - "**/*.py"
-    - "**/*.js"
-    - "**/*.ts"
-    - "**/*.go"
-    - "**/*.rb"
-    - "**/*.java"
-    - "**/*.cs"
-    - "**/*.php"
+    - "**/.gitlab-ci.yml"
+    - "**/.gitlab-ci.yaml"
   patterns:
-    - "console.log("
-    - "print("
-    - "logger."
-    - "logging."
-    - "fmt.Printf("
-    - "System.out.print"
-    - "Console.Write"
+    - "script:"
+    - "curl"
+    - "docker:dind"
+    - "privileged: true"
   nearby_terms:
-    - "password"
+    - "deploy"
     - "secret"
     - "token"
-    - "authorization"
-    - "cookie"
-    - "api_key"
-    - "personal"
-  reason: "Logs or diagnostics may expose credentials or sensitive personal data."
-  review_prompt: "Confirm the logged value and sink, then remove it or apply structured allowlisting and irreversible redaction."
-- id: archive-extraction-boundary
-  category: injection
+    - "protected"
+    - "environment"
+    - "| sh"
+    - "| bash"
+  reason: "A GitLab CI job may mix untrusted code execution with privileged runners, deployment, or secret-bearing variables."
+  review_prompt: "Check protected refs and variables, secret exposure to merge-request pipelines, includes, artifacts, and deployment approvals."
+  positive_examples:
+    - "script: curl $REMOTE_SCRIPT_URL | bash  # deploy"
+  negative_examples:
+    - "script: npm test"
+- id: jenkins-shell-or-secret-boundary
+  category: ci-cd
   severity_hint: high
   confidence_hint: medium
+  cwe: "CWE-522"
+  owasp: "A08:2025"
+  asvs: "V13.2.2, V13.3.2"
   globs:
-    - "**/*.py"
-    - "**/*.js"
-    - "**/*.ts"
-    - "**/*.go"
-    - "**/*.rb"
-    - "**/*.java"
-    - "**/*.cs"
-    - "**/*.php"
+    - "**/Jenkinsfile"
   patterns:
-    - "extractall("
-    - "tarfile.extract("
-    - "ZipFile("
-    - "ZipArchive"
-    - "Archive::extract"
-    - "unzipper.Extract("
+    - "sh "
+    - "bat "
+    - "withCredentials"
+    - "checkout"
   nearby_terms:
-    - "upload"
-    - "archive"
-    - "extract"
-    - "path"
-    - "destination"
-  reason: "Archive extraction may permit path traversal, symlink escape, or decompression resource abuse."
-  review_prompt: "Validate every member path and type against the destination, reject links and absolute paths, and bound expansion size and file count."
-- id: production-debug-mode
-  category: other
+    - "deploy"
+    - "secret"
+    - "token"
+    - "pull"
+    - "branch"
+    - "${"
+  reason: "A Jenkins pipeline may execute branch-controlled code near credentials or deployment steps."
+  review_prompt: "Check branch trust, credential scope, Groovy and shell interpolation of parameters, and deployment gates."
+  positive_examples:
+    - "withCredentials([string(credentialsId: 'deploy-token', variable: 'TOKEN')]) { sh \"deploy ${params.BRANCH}\" }"
+  negative_examples:
+    - "sh 'npm test'"
+- id: circleci-privileged-job-boundary
+  category: ci-cd
   severity_hint: high
   confidence_hint: medium
+  cwe: "CWE-522"
+  owasp: "A08:2025"
+  asvs: "V13.2.2, V13.3.2"
   globs:
-    - "**/*.py"
-    - "**/*.js"
-    - "**/*.ts"
-    - "**/*.rb"
-    - "**/*.php"
+    - "**/.circleci/config.yml"
+    - "**/.circleci/config.yaml"
+  patterns:
+    - "setup_remote_docker"
+    - "docker_layer_caching"
+    - "run:"
+  nearby_terms:
+    - "deploy"
+    - "secret"
+    - "token"
+    - "sudo"
+    - "curl"
+    - "context"
+  reason: "A CircleCI job may combine privileged execution, contexts with credentials, or deployment with branch-controlled code."
+  review_prompt: "Check fork policy, contexts, secret scope, shell interpolation, remote Docker privileges, and deployment approvals."
+  positive_examples:
+    - "run: curl -sSL $INSTALLER | sudo bash  # deploy context"
+  negative_examples:
+    - "run: npm ci"
+- id: terraform-public-or-wildcard-access
+  category: supply-chain
+  severity_hint: high
+  confidence_hint: medium
+  cwe: "CWE-284, CWE-732"
+  owasp: "A02:2025"
+  asvs: "V13.2.4, V13.2.2"
+  globs:
+    - "**/*.tf"
+    - "**/*.tfvars"
+  patterns:
+    - "0.0.0.0/0"
+    - "::/0"
+    - "Principal"
+    - "Action"
+    - "acl = \"public-read\""
+    - "publicly_accessible = true"
+    - "block_public_acls = false"
+  nearby_terms:
+    - "*"
+    - "ingress"
+    - "cidr"
+    - "iam"
+    - "policy"
+    - "public"
+    - "22"
+    - "3389"
+    - "5432"
+  reason: "Infrastructure-as-code may expose a public network path, public storage, or wildcard IAM access."
+  review_prompt: "Confirm whether the public or wildcard access is required, scoped to the minimum, and protected by environment controls."
+  positive_examples:
+    - "cidr_blocks = [\"0.0.0.0/0\"]  # ingress"
+  negative_examples:
+    - "cidr_blocks = [var.office_cidr]"
+- id: kubernetes-privileged-workload
+  category: supply-chain
+  severity_hint: high
+  confidence_hint: medium
+  cwe: "CWE-250"
+  owasp: "A02:2025"
+  asvs: "V13.2.2"
+  globs:
     - "**/*.yml"
     - "**/*.yaml"
   patterns:
-    - "DEBUG = True"
-    - "DEBUG=True"
-    - "debug=True"
-    - "APP_DEBUG=true"
-    - "display_errors = On"
+    - "privileged: true"
+    - "hostPath:"
+    - "hostNetwork: true"
+    - "hostPID: true"
+    - "runAsUser: 0"
+    - "allowPrivilegeEscalation: true"
+    - "/var/run/docker.sock"
   nearby_terms:
-    - "production"
-    - "deploy"
-    - "host=0.0.0.0"
-    - "environment"
-    - "config"
-  reason: "Production-facing debug behavior may expose secrets, code, or an interactive debugger."
-  review_prompt: "Confirm deployment reachability and make production configuration fail closed with debug and verbose error output disabled."
+    - "kind:"
+    - "container"
+    - "pod"
+    - "deployment"
+    - "securityContext"
+    - "services:"
+    - "image:"
+    - "volumes"
+  reason: "A container or pod spec requests privileged host access (root, host namespaces, host paths, Docker socket)."
+  review_prompt: "Check security context, host mounts, namespace and RBAC scope, and whether privileged access is required at all."
+  positive_examples:
+    - "hostNetwork: true  # kind: Deployment"
+  negative_examples:
+    - "runAsNonRoot: true  # kind: Deployment"

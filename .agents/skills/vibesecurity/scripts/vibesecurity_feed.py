@@ -4,9 +4,11 @@ import json
 import ssl
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final
 
@@ -24,13 +26,27 @@ OSV_VULN_URL: Final = "https://api.osv.dev/v1/vulns/"
 KEV_URL: Final = (
     "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 )
-USER_AGENT: Final = "VibeSecurity-feed/3 (+https://github.com/Master0fFate/VibeSecurity)"
+EPSS_URL: Final = "https://api.first.org/data/v1/epss"
+NPM_REGISTRY_URL: Final = "https://registry.npmjs.org/"
+PYPI_JSON_URL: Final = "https://pypi.org/pypi/"
+EPSS_RECORD_KEY: Final = "epss/scores.json"
+USER_AGENT: Final = "VibeSecurity-feed/4 (+https://github.com/Master0fFate/VibeSecurity)"
 HTTP_TIMEOUT_SECONDS: Final = 30
 HTTP_RETRIES: Final = 2
+FETCH_WORKERS: Final = 8
 MAX_PACKAGES_PER_REFRESH: Final = 2_000
 MAX_VULN_RECORDS: Final = 500
+MAX_EPSS_CVES: Final = 2_000
+EPSS_BATCH_SIZE: Final = 100
+MAX_REGISTRY_LOOKUPS: Final = 2_000
 MAX_RESPONSE_BYTES: Final = 100_000_000
+MAX_REGISTRY_RESPONSE_BYTES: Final = 4_000_000
+REGISTRY_ECOSYSTEMS: Final = {"npm", "PyPI"}
 BUNDLE_SCHEMA: Final = "vibesecurity-advisory-bundle/1"
+
+
+class NotFoundError(OSError):
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,46 +78,42 @@ def parse_utc(value: str) -> datetime | None:
             return None
 
 
-def _http_get(url: str, accept: str = "application/json") -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": accept})
+def _request(url: str, accept: str, body: bytes | None) -> urllib.request.Request:
+    headers = {"User-Agent": USER_AGENT, "Accept": accept}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    return urllib.request.Request(url, data=body, headers=headers, method="POST" if body is not None else "GET")
+
+
+def _fetch(url: str, accept: str = "application/json", body: bytes | None = None, max_bytes: int = MAX_RESPONSE_BYTES) -> bytes:
+    request = _request(url, accept, body)
     context = ssl.create_default_context()
     last_error: Exception | None = None
     for attempt in range(HTTP_RETRIES + 1):
         try:
             with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS, context=context) as response:
-                data = response.read(MAX_RESPONSE_BYTES + 1)
-                if len(data) > MAX_RESPONSE_BYTES:
-                    raise ValueError(f"response exceeds {MAX_RESPONSE_BYTES} bytes: {url}")
+                data = response.read(max_bytes + 1)
+                if len(data) > max_bytes:
+                    raise ValueError(f"response exceeds {max_bytes} bytes: {url}")
                 return data
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                raise NotFoundError(f"404 for {url}") from exc
+            last_error = exc
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
             last_error = exc
-            if attempt < HTTP_RETRIES:
-                time.sleep(2**attempt)
-    raise OSError(f"GET {url} failed after {HTTP_RETRIES + 1} attempts: {last_error}")
+        if attempt < HTTP_RETRIES:
+            time.sleep(2**attempt)
+    verb = "POST" if body is not None else "GET"
+    raise OSError(f"{verb} {url} failed after {HTTP_RETRIES + 1} attempts: {last_error}")
+
+
+def _http_get(url: str, accept: str = "application/json") -> bytes:
+    return _fetch(url, accept)
 
 
 def _http_post_json(url: str, payload: JsonMap) -> bytes:
-    body = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=body,
-        headers={"User-Agent": USER_AGENT, "Content-Type": "application/json"},
-        method="POST",
-    )
-    context = ssl.create_default_context()
-    last_error: Exception | None = None
-    for attempt in range(HTTP_RETRIES + 1):
-        try:
-            with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS, context=context) as response:
-                data = response.read(MAX_RESPONSE_BYTES + 1)
-                if len(data) > MAX_RESPONSE_BYTES:
-                    raise ValueError(f"response exceeds {MAX_RESPONSE_BYTES} bytes: {url}")
-                return data
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-            last_error = exc
-            if attempt < HTTP_RETRIES:
-                time.sleep(2**attempt)
-    raise OSError(f"POST {url} failed after {HTTP_RETRIES + 1} attempts: {last_error}")
+    return _fetch(url, body=json.dumps(payload).encode("utf-8"))
 
 
 def _write_cache(path: Path, data: bytes) -> None:
@@ -109,20 +121,38 @@ def _write_cache(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
-def refresh_osv(root: Path, directory: Path) -> tuple[FetchResult, list[str]]:
+def _write_record(path: Path, record: JsonMap) -> None:
+    payload = json.dumps(record, sort_keys=True).encode("utf-8")
+    _write_cache(path, payload)
+    path.with_suffix(".sha256").write_text(sha256_bytes(payload), encoding="utf-8")
+
+
+def _fetch_vuln(vuln_id: str) -> tuple[str, JsonValue | None, int, str]:
+    try:
+        data = _http_get(OSV_VULN_URL + vuln_id)
+        return vuln_id, json.loads(data.decode("utf-8")), len(data), ""
+    except (OSError, json.JSONDecodeError) as exc:
+        return vuln_id, None, 0, f"osv vuln fetch failed for {vuln_id}: {exc}"
+
+
+def refresh_osv(root: Path, directory: Path) -> tuple[FetchResult, list[str], set[str], list[tuple[str, str]]]:
     """Query OSV (which aggregates GitHub GHSA advisories) per installed package.
 
     querybatch returns only advisory ids, so each id is fetched once as a full
-    OSV record (ranges, aliases, fixed events) and cached.
+    OSV record (ranges, aliases, fixed events) and cached. Returns the CVE ids
+    seen so EPSS can be refreshed for them, plus the package list.
     """
     deps = deps_payload(root)
     dependencies = deps.get("dependencies")
     packages = osv_query_packages(dependencies if isinstance(dependencies, list) else [])
     warnings: list[str] = []
     if not packages:
-        return FetchResult(False, 0, "no supported lockfiles or packages found"), [
-            "no supported lockfiles found; nothing to query"
-        ]
+        return (
+            FetchResult(False, 0, "no supported lockfiles or packages found"),
+            ["no supported lockfiles found; nothing to query"],
+            set(),
+            [],
+        )
     if len(packages) > MAX_PACKAGES_PER_REFRESH:
         warnings.append(
             f"package count {len(packages)} exceeds {MAX_PACKAGES_PER_REFRESH}; truncated"
@@ -136,12 +166,15 @@ def refresh_osv(root: Path, directory: Path) -> tuple[FetchResult, list[str]]:
         response = _http_post_json(OSV_QUERY_BATCH_URL, {"queries": queries})
         batch = json.loads(response.decode("utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        return FetchResult(False, 0, str(exc)), [f"osv querybatch failed: {exc}"]
+        return FetchResult(False, 0, str(exc)), [f"osv querybatch failed: {exc}"], set(), packages
     results = batch.get("results") if isinstance(batch, dict) else None
     if not isinstance(results, list) or len(results) != len(packages):
-        return FetchResult(False, len(response), "osv querybatch shape unexpected"), [
-            "osv querybatch returned unexpected shape; nothing cached"
-        ]
+        return (
+            FetchResult(False, len(response), "osv querybatch shape unexpected"),
+            ["osv querybatch returned unexpected shape; nothing cached"],
+            set(),
+            packages,
+        )
     vuln_ids: set[str] = set()
     for result in results:
         vulns = result.get("vulns") if isinstance(result, dict) else None
@@ -152,41 +185,45 @@ def refresh_osv(root: Path, directory: Path) -> tuple[FetchResult, list[str]]:
     ordered_ids = sorted(vuln_ids)[:MAX_VULN_RECORDS]
     full_records: dict[str, JsonValue] = {}
     total_bytes = len(response)
-    for vuln_id in ordered_ids:
-        try:
-            data = _http_get(OSV_VULN_URL + vuln_id)
-            total_bytes += len(data)
-            full_records[vuln_id] = json.loads(data.decode("utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            warnings.append(f"osv vuln fetch failed for {vuln_id}: {exc}")
+    cve_ids: set[str] = set()
+    with ThreadPoolExecutor(max_workers=FETCH_WORKERS) as pool:
+        for vuln_id, record, size, warning in pool.map(_fetch_vuln, ordered_ids):
+            if warning:
+                warnings.append(warning)
+                continue
+            full_records[vuln_id] = record
+            total_bytes += size
+            if isinstance(record, dict):
+                for alias in [record.get("id"), *(record.get("aliases") or [])]:
+                    if isinstance(alias, str) and alias.startswith("CVE-"):
+                        cve_ids.add(alias)
     fetched = 0
     for index, (ecosystem, name) in enumerate(packages):
         record_path = directory / "osv" / ecosystem.replace("/", "_") / f"{name.replace('/', '__')}.json"
         result = results[index]
         vulns = result.get("vulns") if isinstance(result, dict) else None
-        record = {
-            "schema": "vibesecurity-osv-record/1",
-            "ecosystem": ecosystem,
-            "package": name,
-            "fetched_at": _utc_iso(_now()),
-        }
         ids: list[str] = []
         if isinstance(vulns, list):
             for vuln in vulns:
                 if isinstance(vuln, dict) and isinstance(vuln.get("id"), str):
                     ids.append(vuln["id"])
-        record["advisory_ids"] = ids
-        record["vulns"] = [full_records[vuln_id] for vuln_id in ids if vuln_id in full_records]
-        payload = json.dumps(record, sort_keys=True).encode("utf-8")
-        _write_cache(record_path, payload)
-        record_path.with_suffix(".sha256").write_text(sha256_bytes(payload), encoding="utf-8")
+        _write_record(
+            record_path,
+            {
+                "schema": "vibesecurity-osv-record/1",
+                "ecosystem": ecosystem,
+                "package": name,
+                "fetched_at": _utc_iso(_now()),
+                "advisory_ids": ids,
+                "vulns": [full_records[vuln_id] for vuln_id in ids if vuln_id in full_records],
+            },
+        )
         fetched += 1
     detail = f"{fetched}/{len(packages)} package records, {len(full_records)}/{len(vuln_ids)} advisory records stored"
-    return FetchResult(fetched > 0, total_bytes, detail), warnings
+    return FetchResult(fetched > 0, total_bytes, detail), warnings, cve_ids, packages
 
 
 def refresh_kev(directory: Path) -> tuple[FetchResult, list[str]]:
-    warnings: list[str] = []
     try:
         data = _http_get(KEV_URL)
     except OSError as exc:
@@ -198,23 +235,181 @@ def refresh_kev(directory: Path) -> tuple[FetchResult, list[str]]:
             raise ValueError("kev payload missing expected title field")
     except (json.JSONDecodeError, ValueError) as exc:
         return FetchResult(False, len(data), str(exc)), [f"kev payload invalid: {exc}"]
-    record = {
-        "schema": "vibesecurity-kev-record/1",
-        "source": KEV_URL,
-        "fetched_at": _utc_iso(_now()),
-        "catalog": parsed,
-    }
-    payload = json.dumps(record, sort_keys=True).encode("utf-8")
-    path = directory / "kev" / "known_exploited_vulnerabilities.json"
-    _write_cache(path, payload)
-    path.with_suffix(".sha256").write_text(sha256_bytes(payload), encoding="utf-8")
-    return FetchResult(True, len(data), f"kev catalog stored ({len(data)} bytes)"), warnings
+    _write_record(
+        directory / "kev" / "known_exploited_vulnerabilities.json",
+        {
+            "schema": "vibesecurity-kev-record/1",
+            "source": KEV_URL,
+            "fetched_at": _utc_iso(_now()),
+            "catalog": parsed,
+        },
+    )
+    return FetchResult(True, len(data), f"kev catalog stored ({len(data)} bytes)"), []
+
+
+def refresh_epss(directory: Path, cve_ids: set[str]) -> tuple[FetchResult, list[str]]:
+    """Fetch FIRST EPSS exploitation probabilities for the CVEs seen in advisories."""
+    ordered = sorted(cve_ids)
+    warnings: list[str] = []
+    if not ordered:
+        return FetchResult(False, 0, "no CVE ids to score"), []
+    if len(ordered) > MAX_EPSS_CVES:
+        warnings.append(f"cve count {len(ordered)} exceeds {MAX_EPSS_CVES}; EPSS truncated")
+        ordered = ordered[:MAX_EPSS_CVES]
+    scores: dict[str, JsonValue] = {}
+    total_bytes = 0
+    for start in range(0, len(ordered), EPSS_BATCH_SIZE):
+        batch = ordered[start : start + EPSS_BATCH_SIZE]
+        url = f"{EPSS_URL}?cve={','.join(batch)}"
+        try:
+            data = _http_get(url)
+            parsed = json.loads(data.decode("utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            warnings.append(f"epss fetch failed for batch starting {batch[0]}: {exc}")
+            continue
+        total_bytes += len(data)
+        entries = parsed.get("data") if isinstance(parsed, dict) else None
+        if not isinstance(entries, list):
+            warnings.append("epss payload shape unexpected; batch skipped")
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(entry.get("cve"), str):
+                continue
+            try:
+                scores[entry["cve"]] = {
+                    "epss": float(entry.get("epss", "")),
+                    "percentile": float(entry.get("percentile", "")),
+                    "date": entry.get("date"),
+                }
+            except (TypeError, ValueError):
+                continue
+    if not scores:
+        return FetchResult(False, total_bytes, "no EPSS scores returned"), warnings
+    _write_record(
+        directory / EPSS_RECORD_KEY,
+        {
+            "schema": "vibesecurity-epss-record/1",
+            "source": EPSS_URL,
+            "fetched_at": _utc_iso(_now()),
+            "scores": scores,
+        },
+    )
+    return FetchResult(True, total_bytes, f"{len(scores)}/{len(ordered)} CVEs scored"), warnings
+
+
+def _npm_record(name: str) -> JsonMap:
+    url = NPM_REGISTRY_URL + urllib.parse.quote(name, safe="@")
+    try:
+        data = _fetch(url, max_bytes=MAX_REGISTRY_RESPONSE_BYTES)
+    except NotFoundError:
+        return {"exists": False}
+    except ValueError:
+        return {"exists": True, "note": "registry metadata exceeded the size cap; dates unknown"}
+    try:
+        parsed = json.loads(data.decode("utf-8"))
+    except json.JSONDecodeError:
+        return {"exists": True, "note": "registry metadata was not valid JSON; dates unknown"}
+    times = parsed.get("time") if isinstance(parsed, dict) else None
+    tags = parsed.get("dist-tags") if isinstance(parsed, dict) else None
+    latest = tags.get("latest") if isinstance(tags, dict) else None
+    record: JsonMap = {"exists": True, "bytes": len(data)}
+    if isinstance(times, dict):
+        if isinstance(times.get("created"), str):
+            record["created"] = times["created"]
+        if isinstance(latest, str):
+            record["latest_version"] = latest
+            if isinstance(times.get(latest), str):
+                record["latest_published"] = times[latest]
+    return record
+
+
+def _pypi_record(name: str) -> JsonMap:
+    url = f"{PYPI_JSON_URL}{urllib.parse.quote(name)}/json"
+    try:
+        data = _fetch(url, max_bytes=MAX_REGISTRY_RESPONSE_BYTES)
+    except NotFoundError:
+        return {"exists": False}
+    except ValueError:
+        return {"exists": True, "note": "registry metadata exceeded the size cap; dates unknown"}
+    try:
+        parsed = json.loads(data.decode("utf-8"))
+    except json.JSONDecodeError:
+        return {"exists": True, "note": "registry metadata was not valid JSON; dates unknown"}
+    record: JsonMap = {"exists": True, "bytes": len(data)}
+    info = parsed.get("info") if isinstance(parsed, dict) else None
+    releases = parsed.get("releases") if isinstance(parsed, dict) else None
+    latest = info.get("version") if isinstance(info, dict) else None
+    uploads: list[str] = []
+    latest_uploads: list[str] = []
+    if isinstance(releases, dict):
+        for version, files in releases.items():
+            if not isinstance(files, list):
+                continue
+            for item in files:
+                stamp = item.get("upload_time_iso_8601") if isinstance(item, dict) else None
+                if isinstance(stamp, str):
+                    uploads.append(stamp)
+                    if version == latest:
+                        latest_uploads.append(stamp)
+    if uploads:
+        record["created"] = min(uploads)
+    if isinstance(latest, str):
+        record["latest_version"] = latest
+        if latest_uploads:
+            record["latest_published"] = max(latest_uploads)
+    return record
+
+
+def _registry_lookup(package: tuple[str, str]) -> tuple[tuple[str, str], JsonMap | None, str]:
+    ecosystem, name = package
+    try:
+        record = _npm_record(name) if ecosystem == "npm" else _pypi_record(name)
+    except OSError as exc:
+        return package, None, f"registry lookup failed for {ecosystem}/{name}: {exc}"
+    return package, record, ""
+
+
+def refresh_registry(directory: Path, packages: list[tuple[str, str]]) -> tuple[FetchResult, list[str]]:
+    """Record public-registry existence and first-publish dates for npm and PyPI packages."""
+    warnings: list[str] = []
+    targets = [item for item in packages if item[0] in REGISTRY_ECOSYSTEMS]
+    if not targets:
+        return FetchResult(False, 0, "no npm or PyPI packages to look up"), []
+    if len(targets) > MAX_REGISTRY_LOOKUPS:
+        warnings.append(f"registry lookups capped at {MAX_REGISTRY_LOOKUPS} of {len(targets)} packages")
+        targets = targets[:MAX_REGISTRY_LOOKUPS]
+    stored = 0
+    missing = 0
+    total_bytes = 0
+    with ThreadPoolExecutor(max_workers=FETCH_WORKERS) as pool:
+        for (ecosystem, name), record, warning in pool.map(_registry_lookup, targets):
+            if warning or record is None:
+                warnings.append(warning or f"registry lookup returned nothing for {ecosystem}/{name}")
+                continue
+            total_bytes += int(record.pop("bytes", 0) or 0)
+            if record.get("exists") is False:
+                missing += 1
+            _write_record(
+                directory / "registry" / ecosystem / f"{name.replace('/', '__')}.json",
+                {
+                    "schema": "vibesecurity-registry-record/1",
+                    "ecosystem": ecosystem,
+                    "package": name,
+                    "source": NPM_REGISTRY_URL if ecosystem == "npm" else PYPI_JSON_URL,
+                    "fetched_at": _utc_iso(_now()),
+                    **record,
+                },
+            )
+            stored += 1
+    detail = f"{stored}/{len(targets)} registry records stored; {missing} not found on the public registry"
+    return FetchResult(stored > 0, total_bytes, detail), warnings[:50]
 
 
 def feed_refresh_payload(
     root: Path,
     directory: Path,
     network_enabled: bool = True,
+    registry_lookups: bool = True,
 ) -> JsonMap:
     warnings: list[str] = []
     results: list[JsonMap] = []
@@ -227,12 +422,21 @@ def feed_refresh_payload(
             "warnings": ["network disabled by policy; refresh refused"],
             "candidates": [],
         }
-    osv_result, osv_warnings = refresh_osv(root, directory)
+    osv_result, osv_warnings, cve_ids, packages = refresh_osv(root, directory)
     warnings.extend(osv_warnings)
     results.append({"source": "osv+ghsa", **_result_json(osv_result)})
     kev_result, kev_warnings = refresh_kev(directory)
     warnings.extend(kev_warnings)
     results.append({"source": "kev", **_result_json(kev_result)})
+    epss_result, epss_warnings = refresh_epss(directory, cve_ids)
+    warnings.extend(epss_warnings)
+    results.append({"source": "epss", **_result_json(epss_result)})
+    if registry_lookups:
+        registry_result, registry_warnings = refresh_registry(directory, packages)
+        warnings.extend(registry_warnings)
+        results.append({"source": "registry", **_result_json(registry_result)})
+    else:
+        results.append({"source": "registry", "ok": False, "bytes": 0, "detail": "registry lookups disabled by policy"})
     manifest = build_manifest(directory)
     _write_cache(directory / "manifest.json", json.dumps(manifest, sort_keys=True, indent=2).encode("utf-8"))
     return {
@@ -325,14 +529,17 @@ def load_advisory_db(
 def provenance_block(directory: Path, max_age_hours: int) -> JsonMap:
     records, warnings = load_advisory_db(directory, max_age_hours)
     newest: datetime | None = None
-    for record in records.values():
+    sources: set[str] = set()
+    for key, record in records.items():
         if isinstance(record, dict):
             fetched = parse_utc(str(record.get("fetched_at", "")))
             if fetched and (newest is None or fetched > newest):
                 newest = fetched
+        sources.add(key.split("/", 1)[0])
     age_hours = (_now() - newest).total_seconds() / 3600 if newest else None
     return {
-        "source": "osv+ghsa+kev local cache",
+        "source": "osv+ghsa+kev+epss+registry local cache",
+        "sources_present": sorted(sources),
         "cache_dir": str(directory),
         "fetched_at": _utc_iso(newest) if newest else None,
         "age_hours": round(age_hours, 1) if age_hours is not None else None,
@@ -344,7 +551,7 @@ def provenance_block(directory: Path, max_age_hours: int) -> JsonMap:
 
 
 def export_bundle(directory: Path, output: Path) -> JsonMap:
-    """D5: write a checksummed, single-file advisory bundle for air-gapped use."""
+    """Write a checksummed, single-file advisory bundle for air-gapped use."""
     manifest = build_manifest(directory)
     sections: dict[str, JsonValue] = {}
     for path in sorted(directory.rglob("*.json")):

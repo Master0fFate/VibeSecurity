@@ -404,6 +404,47 @@ def profile_files(root: Path, files: list[Path]) -> list[Path]:
     return primary if has_primary_evidence else files
 
 
+ENV_TEMPLATE_MARKERS: Final = ("example", "sample", "template", "dist")
+VIBECODER_PLATFORM_MARKERS: Final = {
+    "@supabase/supabase-js": "supabase",
+    "@supabase/ssr": "supabase",
+    "supabase": "supabase",
+    "firebase": "firebase",
+    "firebase-admin": "firebase",
+    "@clerk/nextjs": "clerk",
+    "@clerk/clerk-react": "clerk",
+    "next-auth": "next-auth",
+    "@auth/core": "next-auth",
+    "convex": "convex",
+    "@prisma/client": "prisma",
+    "drizzle-orm": "drizzle",
+    "stripe": "stripe",
+    "resend": "resend",
+    "@upstash/redis": "upstash",
+    "@vercel/kv": "vercel-storage",
+    "@vercel/blob": "vercel-storage",
+    "@neondatabase/serverless": "neon",
+}
+
+
+def env_file_names(rels: list[str]) -> list[str]:
+    names: list[str] = []
+    for rel in rels:
+        name = rel.rsplit("/", 1)[-1]
+        lower = name.casefold()
+        if lower.startswith(".env") and not any(marker in lower for marker in ENV_TEMPLATE_MARKERS):
+            names.append(rel)
+    return sorted(names)[:50]
+
+
+def detect_platforms(files: list[Path]) -> list[str]:
+    package_names: set[str] = set()
+    for path in files:
+        if path.name == "package.json":
+            package_names.update(dependency_names_from_package(path))
+    return sorted({platform for marker, platform in VIBECODER_PLATFORM_MARKERS.items() if marker in package_names})
+
+
 def detect_inventory(root: Path, files: list[Path] | None = None) -> JsonMap:
     resolved_root = root.resolve()
     selected = files if files is not None else list(select_repo_files(root).files)
@@ -438,6 +479,8 @@ def detect_inventory(root: Path, files: list[Path] | None = None) -> JsonMap:
         ],
         "workflows": workflows,
         "package_managers": detect_package_managers(files),
+        "platforms": detect_platforms(profiled_files),
+        "env_files": [display_path(item) for item in env_file_names(rels)],
         "route_files": [
             display_path(item)
             for item in sorted(item for item in profiled_rels if route_like(item))[:50]

@@ -1,21 +1,103 @@
-# Synthetic secret-detection corpus. Every value below is fake and was generated
-# for this file; none is a real credential. Used by the secrets test suite to
-# measure recall and precision of the format engine.
+# Synthetic secret-detection corpus. One shape per line, one format per shape.
+# Lines are templates: {alnum:N}, {hex:N}, {upper:N}, {digits:N}, {b32:N},
+# {bech32:N}, {b64:N} are expanded in memory by expand_sample() when the test
+# runs. No complete token shape is ever stored in the repository, so secret
+# scanners and push protection never see one. Nothing here is a real credential.
 
-AKIAIOSFODNN7EXAMPLE
-ghp_0123456789abcdefghijklmnopqrstuvwxyzAB
-github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz1234567890
-glpat-0123456789abcdefghijklmnopqrst
-xoxb-0123456789abcdefghi
-sk-proj0123456789abcdefghijklmnopqrstuvwxyz
-sk-ant-api03-0123456789abcdefghijklmnopqrstuvwxyz
-AIza0123456789abcdefghijklmnopqrstuvwxy
-npm_0123456789abcdefghijklmnopqrstuvwxyz0123
-pypi-AgEIcHlwaS5vcmc0123456789abcdefghijklmnopqrstuvwxyz
-SG.0123456789abcdef0123456789abcdef.0123456789abcdef0123456789abcdef
-SK0123456789abcdef0123456789abcdef01234567
+sk-ant-admin01-{alnum:93}AA
+sk-ant-api03-{alnum:93}AA
+sk-proj-{alnum:58}T3BlbkFJ{alnum:58}
+sk-{alnum:20}T3BlbkFJ{alnum:20}
+sk-or-v1-{hex:64}
+sk-{alnum:48}
+AIza{alnum:35}
+GOCSPX-{alnum:28}
+gsk_{alnum:52}
+xai-{alnum:80}
+pplx-{alnum:48}
+hf_{lower:34}
+api_org_{lower:34}
+r8_{alnum:37}
+lsv2_pt_{hex:32}_{hex:10}
+tvly-dev-{alnum:32}
+pcsk_{alnum:60}
+ABSK{b64:120}==
+AKIA{b32:16}
+ASIA{b32:16}
+aws_secret_access_key = {b64:40}
+AccountKey={b64:86}==
+"type": "service_account"
+abc1Q~{alnum:34}
+LTAI{alnum:20}
+dop_v1_{hex:64}
+fo1_{alnum:43}
+hvs.{alnum:100}
+{alnum:14}.atlasv1.{alnum:64}
+v1.0-{hex:24}-{hex:146}
+HRKU-AA{alnum:58}
+pul-{hex:40}
+dapi{hex:32}
+PMAK-{hex:24}-{hex:34}
+dp.pt.{alnum:43}
+AGE-SECRET-KEY-1{bech32:58}
+ops_eyJ{b64:260}
+glc_{b64:48}==
+glsa_{alnum:32}_{hex:8}
+eyJrIjoi{alnum:80}
+dt0c01.{alnum:24}.{alnum:64}
+NRAK-{upper:27}
+sntryu_{hex:64}
+sntrys_eyJpYXQiO{alnum:40}
+github_pat_11ABCDEFG0123456789_{alnum:62}
+ghp_{alnum:36}
+ghs_{alnum:36}
+glpat-{alnum:20}
+glrt-{alnum:24}
+npm_{alnum:36}
+pypi-AgEIcHlwaS5vcmc{alnum:60}
+rubygems_{hex:48}
+ATATT3{alnum:186}
+eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJvbGUiOiJzZXJ2aWNlX3JvbGUi{alnum:20}.{alnum:43}
+eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJvbGUiOiJhbm9uI{alnum:20}.{alnum:43}
+sb_secret_{alnum:30}
+sb_publishable_{alnum:30}
+sbp_{hex:40}
+rk_live_{alnum:24}
+sk_test_{alnum:24}
+whsec_{alnum:32}
+pk_live_{alnum:24}
+re_{alnum:9}_{alnum:24}
+prod:happy-animal-123|{b64:48}
+pscale_tkn_{alnum:40}
+lin_api_{alnum:40}
+ntn_{digits:11}{alnum:35}
+pat{alnum:14}.{hex:64}
+shpat_{hex:32}
+sq0atp-{alnum:22}
+xoxb-{digits:10}-{digits:13}-{alnum:24}
+xoxp-{digits:10}-{digits:10}-{digits:10}-{alnum:30}
+xapp-1-A{digits:10}-{digits:10}-{hex:22}
+xoxe.xoxb-1-{upper:164}
+https://hooks.slack.com/services/T{alnum:10}/B{alnum:10}/{alnum:24}
+https://discord.com/api/webhooks/{digits:18}/{alnum:68}
+M{alnum:24}.{alnum:6}.{alnum:30}
+telegram_token = {digits:10}:A{alnum:34}
+https://abcd1234.webhook.office.com/webhookb2/{hex:8}-{hex:4}@{hex:8}-{hex:4}/IncomingWebhook/{hex:32}/{hex:8}-{hex:4}
+SK{hex:32}
+SG.{alnum:22}.{alnum:43}
+mailgun_key = key-{hex:32}
+{hex:32}-us21
+xkeysib-{hex:64}-{alnum:16}
+nfp_{alnum:40}
+tfp_{alnum:59}
+FLWSECK_TEST-{hex:32}-X
+shippo_live_{hex:40}
+sk_{hex:48}
 -----BEGIN RSA PRIVATE KEY-----
-eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U
-postgres://admin:s3cretpw@example.internal:5432/prod
-redis://svc:passw0rd123@cache.internal:6379/0
-mongodb+srv://user99:hunter2secret@cluster.example.net/db
+PuTTY-User-Key-File-3: ssh-ed25519
+Authorization: Bearer {alnum:40}
+eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.{alnum:43}
+postgres://admin:{alnum:16}@example.internal:5432/prod
+redis://svc:{alnum:16}@cache.internal:6379/0
+mongodb+srv://user99:{alnum:16}@cluster.example.net/db
+mysql://app@db.internal:3306/app?password={alnum:16}

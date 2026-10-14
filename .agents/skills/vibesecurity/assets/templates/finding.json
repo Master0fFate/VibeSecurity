@@ -6,6 +6,14 @@
   "status": "confirmed|needs-review|fixed|wont-fix|false-positive",
   "category": "authz|authn|injection|ssrf|xss|secrets|supply-chain|ci-cd|ai-agentic|privacy|crypto|availability|other",
   "fingerprint": "stable locator hash emitted by the helper",
+  "cwe": "CWE-862",
+  "owasp": "A01:2025",
+  "asvs": "V8.2.2, V8.3.1",
+  "standards": {
+    "cwe": [{"id": "CWE-862", "name": "Missing Authorization", "top25_2025_rank": 4}],
+    "owasp": [{"id": "A01:2025", "name": "Broken Access Control"}],
+    "asvs": [{"id": "V8.2.2", "level": "1", "text": "copied verbatim by the helper from references/standards/asvs-5.0.0.json"}]
+  },
   "sources": [
     {"type": "CVE|GHSA|OSV|KEV|vendor-advisory|standard|documented-pattern", "id": "CVE-2024-1234", "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-1234"}
   ],
@@ -15,7 +23,10 @@
     "fixed_versions": ["1.2.0"],
     "recommended_version": "1.2.0"
   },
-  "standard_refs": ["OWASP-ASVS-v5.0.0", "OWASP-LLM01:2025"],
+  "cvss": {"version": "3.1", "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "base_score": 9.8, "severity": "critical"},
+  "epss": {"cve": "CVE-2024-1234", "epss": 0.734, "percentile": 0.981, "date": "2026-10-13"},
+  "kev": false,
+  "severity_basis": "advisory database_specific.severity (GHSA review band)",
   "affected_files": [
     {
       "path": "src/example.ts",
